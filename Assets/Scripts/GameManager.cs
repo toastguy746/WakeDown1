@@ -1,157 +1,438 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
-using TMPro; // TextMeshPro를 사용하기 위해 필수 추가!
+using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 public class GameManager : MonoBehaviour
 {
     [Header("핵심 오브젝트 연동")]
-    public PlayerMovement playerScript;   // 플레이어 스크립트 연동
-    public Transform ghostTransform;     // Ghost 객체
-    public Transform mainCameraTransform; // 메인 카메라
+    public PlayerMovement playerScript;
+    public Transform ghostTransform;
+
+    [Header("정령 컴패니언 연동")]
+    public Spirit spirit;
+
+    [Header("정령 Pet Ghost")]
+    public Transform petGhostTransform;
+
+    [Header("카메라/배경 연동")]
+    public CameraAndBackgroundController cameraController;
 
     [Header("세계관 설정")]
-    public float worldYInterval = 100000f; // 두 세계 간의 고정 Y축 거리 간격
-    public bool isDream = false;         // 현재 꿈 세계인지 여부
+    public float worldYInterval = 12f;
+    public bool isDream = false;
 
-    [Header("UI 연출 세팅")]
-    public CanvasGroup uiCanvasGroup;     // 캔버스의 Canvas Group
-    public GameObject sleepImage;         // Sleep 이미지 오브젝트
-    public GameObject wakeUpImage;        // WakeUp 이미지 오브젝트
-    public TextMeshProUGUI tipText;       // 💥 팁을 띄울 TMP 텍스트 오브젝트
-    public float transitionDuration = 2f; // 전체 연출 시간 (초)
+    [Header("화면 전환 연출 연동")]
+    public WorldTransitionUI transitionUI;
+    public float transitionDuration = 2f;
 
-    [Header("오디오 설정 (수동 할당용)")]
-    // [추가] 인스펙터에서 직접 AudioSource를 연결할 수 있는 변수입니다.
-    [SerializeField] private AudioSource switchWorldAudioSource; 
+    [Header("월드 전환 입력 설정")]
+    public KeyCode switchWorldKey = KeyCode.C;
 
-    private bool isSwitching = false;     // 중복 전환 방지용 변수
+    [Header("꿈/현실 표시 버튼")]
+    public Button worldStateButton;
+    public Color realityColor = Color.green;
+    public Color dreamColor =
+        new Color(0.6f, 0.2f, 0.9f);
 
-    // 💥 몽유병 게임 전용 랜덤 팁 리스트
-    private string[] tipList = new string[]
-    {
-        "tip. 렘수면 상태일 때 눈동자가 빠르게 움직이며 이때 꿈을 가장 많이 꿉니다",
-        "tip. 잠들기 직전 몸이 움찔하는 것은 뇌가 추락한다고 착각하기 때문입니다",
-        "tip. 선천적 시각장애인은 꿈에서도 이미지 없이 소리와 촉감만 느낍니다",
-        "tip. 사람은 인생의 약 3분의 1을 잠으로 보낸다고 합니다",
-        "tip. 꿈속에서는 시계나 책의 글자가 계속 바뀌어 보입니다",
-        "tip. 하품은 전염성이 강해서 글로 봐도 하품이 나올 수 있습니다",
-        "tip. 고양이와 개도 잠을 자며 꿈을 꾼다고 알려져 있습니다",
-        "tip. 악몽을 자주 꾸는 사람일수록 창의력이 높다는 연구가 있습니다",
-        "tip. 잠자는 동안 뇌는 노폐물을 청소하는 작업을 합니다",
-        "tip. 꿈은 깬 지 5분 안에 절반을, 10분 뒤엔 대부분 잊혀집니다"
-    };
+    private bool isSwitching = false;
+
+    private Transform playerTransform;
+    private Collider2D playerCollider;
 
     void Start()
     {
-        // 시작할 때 UI 초기화
-        if (uiCanvasGroup != null) uiCanvasGroup.alpha = 0f;
-        if (sleepImage != null) sleepImage.SetActive(false);
-        if (wakeUpImage != null) wakeUpImage.SetActive(false);
-        if (tipText != null) tipText.gameObject.SetActive(false); // 팁 글씨 꺼두기
+        if (playerScript != null)
+        {
+            playerTransform = playerScript.transform;
+            playerCollider =
+                playerScript.GetComponent<Collider2D>();
+        }
+
+        if (playerScript != null)
+        {
+            playerScript.isInDream = isDream;
+        }
+
+        UpdateWorldStateButtonColor();
 
         ResetGhostInitialPosition();
+        ResetPetGhostInitialPosition();
     }
 
     void Update()
     {
-        // 상시로 고스트 위치 동기화
-        if (!isSwitching && playerScript != null && ghostTransform != null)
-        {
-            ghostTransform.localScale = playerScript.transform.localScale;
+        // ============================================================
+        // Player Ghost
+        // ============================================================
 
-            if (!isDream)
-                ghostTransform.position = new Vector3(playerScript.transform.position.x, playerScript.transform.position.y - worldYInterval, playerScript.transform.position.z);
-            else
-                ghostTransform.position = new Vector3(playerScript.transform.position.x, playerScript.transform.position.y + worldYInterval, playerScript.transform.position.z);
+        if (!isSwitching &&
+            playerTransform != null &&
+            ghostTransform != null)
+        {
+            ghostTransform.localScale =
+                playerTransform.localScale;
+
+            Vector3 playerPos =
+                playerTransform.position;
+
+            float ghostY =
+                isDream
+                ? playerPos.y + worldYInterval
+                : playerPos.y - worldYInterval;
+
+            ghostTransform.position =
+                new Vector3(
+                    playerPos.x,
+                    ghostY,
+                    playerPos.z
+                );
         }
 
-        // 세계 전환 키(C) 입력 감지
-        if (Input.GetKeyDown(KeyCode.C) && !isSwitching)
+        // ============================================================
+        // Pet Ghost
+        // ============================================================
+
+        if (!isSwitching &&
+            spirit != null &&
+            petGhostTransform != null)
         {
-            StartCoroutine(SwitchWorldSequence());
+            Vector3 spiritPos =
+                spirit.transform.position;
+
+            // Pet Ghost는 Spirit의 X를 그대로 따라간다.
+            // Y만 두 세계의 간격만큼 차이난다.
+            float petGhostY =
+                isDream
+                ? spiritPos.y + worldYInterval
+                : spiritPos.y - worldYInterval;
+
+            petGhostTransform.position =
+                new Vector3(
+                    spiritPos.x,
+                    petGhostY,
+                    spiritPos.z
+                );
+        }
+
+        // ============================================================
+        // 세계 전환 입력
+        // ============================================================
+
+        if (Input.GetKeyDown(switchWorldKey) &&
+            !isSwitching)
+        {
+            SimulateWorldStateButtonPress();
         }
     }
+
+    // ================================================================
+    // 버튼 시뮬레이션
+    // ================================================================
+
+    void SimulateWorldStateButtonPress()
+    {
+        if (worldStateButton == null)
+        {
+            OnWorldStateButtonClicked();
+            return;
+        }
+
+        StartCoroutine(
+            SimulateButtonPressCoroutine()
+        );
+    }
+
+    IEnumerator SimulateButtonPressCoroutine()
+    {
+        PointerEventData pointerData =
+            new PointerEventData(EventSystem.current);
+
+        ExecuteEvents.Execute(
+            worldStateButton.gameObject,
+            pointerData,
+            ExecuteEvents.pointerDownHandler
+        );
+
+        yield return new WaitForSeconds(0.1f);
+
+        ExecuteEvents.Execute(
+            worldStateButton.gameObject,
+            pointerData,
+            ExecuteEvents.pointerUpHandler
+        );
+
+        ExecuteEvents.Execute(
+            worldStateButton.gameObject,
+            pointerData,
+            ExecuteEvents.pointerClickHandler
+        );
+    }
+
+    // ================================================================
+    // 세계 전환 전체 과정
+    // ================================================================
 
     IEnumerator SwitchWorldSequence()
     {
         isSwitching = true;
-        if (playerScript != null) playerScript.canMove = false;
 
-        // [추가] 화면 전환이 시작되는 순간 오디오 소스를 단 한 번 출력합니다.
-        if (switchWorldAudioSource != null)
+        if (playerScript != null)
         {
-            switchWorldAudioSource.Play();
+            playerScript.canMove = false;
         }
 
-        // 💥 [핵심 기능] 페이드 인 직전, 10개의 팁 중 하나를 무작위로 뽑아 텍스트창에 적고 켭니다.
-        if (tipText != null)
+        // ------------------------------------------------------------
+        // 화면 전환
+        // ------------------------------------------------------------
+
+        if (transitionUI != null)
         {
-            int randomIndex = Random.Range(0, tipList.Length); // 0~9 사이의 랜덤 숫자 추출
-            tipText.text = tipList[randomIndex];              // 텍스트 컴포넌트에 글씨 주입
-            tipText.gameObject.SetActive(true);               // 텍스트 오브젝트 활성화
+            yield return StartCoroutine(
+                transitionUI.PlayTransition(
+                    isDream,
+                    transitionDuration,
+                    SwapWorldsAtMidpoint
+                )
+            );
+        }
+        else
+        {
+            SwapWorldsAtMidpoint();
         }
 
-        // 알파가 0일 때 가야 할 세계의 이미지 미리 켜기
-        if (sleepImage != null) sleepImage.SetActive(!isDream);   
-        if (wakeUpImage != null) wakeUpImage.SetActive(isDream); 
+        // ------------------------------------------------------------
+        // 여기부터 화면 전환이 완전히 끝난 뒤
+        // ------------------------------------------------------------
 
-        // 1. 페이드 인 (화면이 빠르게 어두워짐과 동시에 팁 글씨와 이미지가 한 몸으로 나타남)
-        float fadeInTime = transitionDuration * 0.1f; 
-        float fadeOutTime = transitionDuration * 0.3f;
-        float timer = 0f;
-        
-        while (timer < fadeInTime)
+        // 꿈 → 현실일 경우에만 여기서 Spirit을 복귀시킨다.
+        //
+        // 따라서 현실로 돌아오는 동안 화면 전환이 진행되는 동안에는
+        // Spirit이 아직 잠들었던 위치에 그대로 있고,
+        // 화면이 완전히 돌아온 뒤에 Dash가 시작된다.
+        if (!isDream && spirit != null)
         {
-            timer += Time.deltaTime;
-            uiCanvasGroup.alpha = Mathf.Lerp(0f, 1f, timer / fadeInTime);
-            yield return null;
+            spirit.EnterReality();
         }
-        uiCanvasGroup.alpha = 1f;
 
-        // 2. 완전히 어두워진 순간 좌표 교환
-        Vector3 myCurrentPos = playerScript.transform.position;
-        Vector3 ghostCurrentPos = ghostTransform.position;
-        
-        playerScript.transform.position = ghostCurrentPos;
-        ghostTransform.position = myCurrentPos;
+        if (playerScript != null)
+        {
+            playerScript.canMove = true;
+        }
+
+        isSwitching = false;
+
+        CheckDoorOverlapAfterSwitch();
+    }
+
+    // ================================================================
+    // 화면이 완전히 어두워졌을 때
+    // 실제 세계 위치 교환
+    // ================================================================
+
+    void SwapWorldsAtMidpoint()
+    {
+        // ------------------------------------------------------------
+        // Player ↔ Ghost
+        // ------------------------------------------------------------
+
+        if (playerTransform != null &&
+            ghostTransform != null)
+        {
+            Vector3 playerCurrentPos =
+                playerTransform.position;
+
+            Vector3 ghostCurrentPos =
+                ghostTransform.position;
+
+            playerTransform.position =
+                ghostCurrentPos;
+
+            ghostTransform.position =
+                playerCurrentPos;
+        }
+
+        // ------------------------------------------------------------
+        // Spirit ↔ Pet Ghost
+        // ------------------------------------------------------------
+
+        if (spirit != null &&
+            petGhostTransform != null)
+        {
+            Vector3 spiritCurrentPos =
+                spirit.transform.position;
+
+            Vector3 petGhostCurrentPos =
+                petGhostTransform.position;
+
+            spirit.transform.position =
+                petGhostCurrentPos;
+
+            petGhostTransform.position =
+                spiritCurrentPos;
+        }
+
+        // ------------------------------------------------------------
+        // 세계 상태 변경
+        // ------------------------------------------------------------
 
         isDream = !isDream;
 
-        if (mainCameraTransform != null)
+        if (playerScript != null)
         {
-            float cameraTargetY = isDream ? -worldYInterval : 0f;
-            mainCameraTransform.position = new Vector3(0f, cameraTargetY, -10f);
+            playerScript.isInDream = isDream;
         }
 
-        // 3. 어두운 상태 유지 (유저가 랜덤 팁을 여유롭게 읽는 시간)
-        yield return new WaitForSeconds(transitionDuration * 0.6f);
+        // ------------------------------------------------------------
+        // 카메라
+        // ------------------------------------------------------------
 
-        // 4. 페이드 아웃 (화면이 다시 스르륵 밝아짐)
-        timer = 0f;
-        while (timer < fadeOutTime)
+        if (cameraController != null)
         {
-            timer += Time.deltaTime;
-            uiCanvasGroup.alpha = Mathf.Lerp(1f, 0f, timer / fadeOutTime);
-            yield return null;
-        }
-        uiCanvasGroup.alpha = 0f;
+            float cameraTargetY =
+                isDream
+                ? -worldYInterval
+                : 0f;
 
-        // 5. 완벽히 투명해진 후 모든 UI 요소 정리
-        if (sleepImage != null) sleepImage.SetActive(false);
-        if (wakeUpImage != null) wakeUpImage.SetActive(false);
-        if (tipText != null) tipText.gameObject.SetActive(false); // 💥 팁 글씨 다시 끄기
-        
-        if (playerScript != null) playerScript.canMove = true;
-        isSwitching = false;
+            cameraController.SetCameraFixedY(
+                cameraTargetY
+            );
+        }
+
+        // ------------------------------------------------------------
+        // 버튼 색상
+        // ------------------------------------------------------------
+
+        UpdateWorldStateButtonColor();
+
+        // ------------------------------------------------------------
+        // Spirit 상태
+        // ------------------------------------------------------------
+
+        if (spirit != null && isDream)
+        {
+            // --------------------------------------------------------
+            // 현실 → 꿈
+            //
+            // 위치 교환은 위에서 이미 완료됨.
+            // 이 시점에 바로 중력을 켠다.
+            //
+            // 따라서 화면 전환이 끝나기 전부터
+            // 꿈에서 Spirit이 떨어진다.
+            // --------------------------------------------------------
+            spirit.EnterDream();
+        }
+
+        // 꿈 → 현실의 경우에는 여기서 EnterReality를 호출하지 않는다.
+        // 화면 전환이 완전히 끝난 뒤 SwitchWorldSequence()에서 호출한다.
     }
+
+    // ================================================================
+    // 문 겹침 검사
+    // ================================================================
+
+    void CheckDoorOverlapAfterSwitch()
+    {
+        if (playerCollider == null)
+            return;
+
+        ExitDoor[] doors =
+            FindObjectsByType<ExitDoor>();
+
+        for (int i = 0; i < doors.Length; i++)
+        {
+            Collider2D doorCollider =
+                doors[i].GetComponent<Collider2D>();
+
+            if (doorCollider != null &&
+                playerCollider.IsTouching(doorCollider))
+            {
+                doors[i].TryTriggerExit(
+                    playerCollider
+                );
+            }
+        }
+    }
+
+    // ================================================================
+    // 버튼 색상
+    // ================================================================
+
+    void UpdateWorldStateButtonColor()
+    {
+        if (worldStateButton != null &&
+            worldStateButton.image != null)
+        {
+            worldStateButton.image.color =
+                isDream
+                ? dreamColor
+                : realityColor;
+        }
+    }
+
+    // ================================================================
+    // Player Ghost 초기 위치
+    // ================================================================
 
     void ResetGhostInitialPosition()
     {
-        if (ghostTransform != null && playerScript != null)
+        if (ghostTransform != null &&
+            playerTransform != null)
         {
-            float targetY = isDream ? playerScript.transform.position.y + worldYInterval : playerScript.transform.position.y - worldYInterval;
-            ghostTransform.position = new Vector3(playerScript.transform.position.x, targetY, playerScript.transform.position.z);
+            Vector3 playerPos =
+                playerTransform.position;
+
+            float targetY =
+                isDream
+                ? playerPos.y + worldYInterval
+                : playerPos.y - worldYInterval;
+
+            ghostTransform.position =
+                new Vector3(
+                    playerPos.x,
+                    targetY,
+                    playerPos.z
+                );
+        }
+    }
+
+    // ================================================================
+    // Pet Ghost 초기 위치
+    // ================================================================
+
+    void ResetPetGhostInitialPosition()
+    {
+        if (petGhostTransform != null &&
+            spirit != null)
+        {
+            Vector3 spiritPos =
+                spirit.transform.position;
+
+            float targetY =
+                isDream
+                ? spiritPos.y + worldYInterval
+                : spiritPos.y - worldYInterval;
+
+            petGhostTransform.position =
+                new Vector3(
+                    spiritPos.x,
+                    targetY,
+                    spiritPos.z
+                );
+        }
+    }
+
+    // ================================================================
+    // 버튼 OnClick()
+    // ================================================================
+
+    public void OnWorldStateButtonClicked()
+    {
+        if (!isSwitching)
+        {
+            StartCoroutine(
+                SwitchWorldSequence()
+            );
         }
     }
 }
