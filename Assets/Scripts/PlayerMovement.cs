@@ -11,6 +11,7 @@ public class PlayerMovement : MonoBehaviour
     [Header("바닥 체크 세팅")]
     public Transform groundCheck;      // 바닥을 체크할 오브젝트 위치
     public LayerMask groundLayer;      // 바닥으로 인식할 레이어
+    public LayerMask wallLayer;        // [추가] 벽(Wall)에 서 있어도 점프 가능하도록 인식할 레이어
     public float checkRadius = 0.2f;   // 바닥 체크 반경
 
     [HideInInspector]
@@ -71,8 +72,8 @@ public class PlayerMovement : MonoBehaviour
             transform.localScale = new Vector3(moveInput * originalScale, originalScale, originalScale);
         }
 
-        // 3. 바닥 체크
-        isGrounded = Physics2D.OverlapCircle(groundCheck.position, checkRadius, groundLayer);
+        // 3. 바닥 체크 ([추가] Wall 레이어도 함께 인식해서 벽을 밟고 있어도 점프 가능하게 함)
+        isGrounded = Physics2D.OverlapCircle(groundCheck.position, checkRadius, groundLayer | wallLayer);
         anim.SetBool(IsJumpingHash, !isGrounded);
 
         // [추가] 착지 순간 감지 (이전 프레임엔 공중이었는데 지금 프레임에 바닥에 닿았을 때)
