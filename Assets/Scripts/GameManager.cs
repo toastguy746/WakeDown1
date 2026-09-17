@@ -194,7 +194,7 @@ public class GameManager : MonoBehaviour
     {
         if (playerCollider == null) return;
 
-        ExitDoor[] doors = FindObjectsByType<ExitDoor>(FindObjectsSortMode.None);
+        ExitDoor[] doors = FindObjectsByType<ExitDoor>(FindObjectsInactive.Exclude);
         for (int i = 0; i < doors.Length; i++)
         {
             Collider2D doorCollider = doors[i].GetComponent<Collider2D>();
