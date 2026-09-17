@@ -43,6 +43,11 @@ public class GameManager : MonoBehaviour
     public float realitySpiritSpotIntensity = 2f;
     public float dreamSpiritSpotIntensity = 0f;
 
+    [Header("튜토리얼 대화 슬롯")]
+    // [추가] 플레이어/정령 각각의 대화 슬롯. TutorialTrigger가 닿았을 때 이 중 하나에 대사를 띄움
+    public DialogueSlot playerDialogueSlot;
+    public DialogueSlot spiritDialogueSlot;
+
     private bool isSwitching = false;
     private Transform playerTransform;
     private Collider2D playerCollider;
@@ -250,5 +255,17 @@ public class GameManager : MonoBehaviour
     public void OnWorldStateButtonClicked()
     {
         if (!isSwitching) StartCoroutine(SwitchWorldSequence());
+    }
+
+    // ================================================================
+    // 튜토리얼 대화 슬롯 (TutorialTrigger가 호출)
+    // ================================================================
+
+    // [추가] TutorialTrigger가 닿을 때 호출. 어느 슬롯이든 로직은 완전히 동일하게 재사용
+    // (DialogueSlot이 "같으면 스킵, 다르면 교체"를 알아서 처리하므로 여기서 분기할 게 없음)
+    public void ShowTutorialDialogue(TutorialTrigger.TargetSlot slot, string text)
+    {
+        DialogueSlot target = slot == TutorialTrigger.TargetSlot.Player ? playerDialogueSlot : spiritDialogueSlot;
+        if (target != null) target.Show(text);
     }
 }
