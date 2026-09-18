@@ -10,12 +10,15 @@ using UnityEngine.SceneManagement;     // 씬 전환을 위해 필요
 //
 // [흐름]
 // 1. 씬 시작 후 startDelay만큼 기다렸다가 첫 줄이 페이드 인으로 등장
-// 2. Space(또는 자동 진행)로 다음 줄 진행:
-//    - 이전 줄과 화자가 같으면 같은 슬롯 안에서 텍스트만 교체
+// 2. Space(또는 자동 진행)로 다음 줄 진행 (마지막 줄 바로 앞줄까지만):
+//    - 이전 줄과 화자가 같으면 슬롯은 그대로 켜진 채 텍스트만 교체 (깜빡임 없음)
 //    - 이전 줄과 화자가 다르면 이전 화자의 슬롯 전체를 페이드 아웃한 뒤 새 화자의 슬롯을 페이드 인
-// 3. 마지막 줄에서 한 번 더 진행하면, 마지막으로 보이던 슬롯을 페이드 아웃시키며 대사 종료 처리
-//    (스팟 라이트를 0으로 서서히 낮추고, 지정한 이미지도 함께 투명화하고, 지정한 오디오를 재생)
-// 4. 오디오 재생 후 musicPlayDuration만큼 지나면 음악을 페이드아웃하며 nextSceneName 씬으로 전환
+//    - 각 줄은 textTypingSpeed 속도로 한 글자씩 타이핑되듯 표시됨
+// 3. Lines 배열의 마지막 줄(예: 12줄이면 Element 11)은 일반 진행에서 제외되고,
+//    나머지 줄이 다 끝나면 곧바로 대사 종료 연출(라이트/이미지 페이드, 노래 재생)로 넘어감
+// 4. 노래(endingAudioSource)가 musicPlayDuration만큼 재생된 뒤, postSongLineDelay만큼 더 기다렸다가
+//    마지막 줄이 해당 화자의 슬롯에 타이핑되며 표시되고, postSongLineHoldDuration만큼 유지된 뒤 페이드 아웃
+// 5. 이후 노래를 페이드아웃하며 nextSceneName 씬으로 전환
 public class LullabyDialogue : MonoBehaviour
 {
     public enum Speaker { Player, Mom }
@@ -33,6 +36,8 @@ public class LullabyDialogue : MonoBehaviour
     public DialogueSlot momDialogueSlot;    // 배경+텍스트만 포함하는 엄마 쪽 슬롯
 
     [Header("대본 (위에서부터 순서대로, 줄마다 화자 지정)")]
+    // [주의] 배열의 마지막 요소(예: 12줄이면 Element 11)는 일반 진행에서 제외되고
+    // 노래가 끝난 뒤 별도로 표시되는 "후일담 대사"로 취급됩니다.
     public DialogueLine[] lines = new DialogueLine[]
     {
         new DialogueLine { speaker = Speaker.Player, text = "엄마.. 안주무세요?" },
@@ -41,6 +46,10 @@ public class LullabyDialogue : MonoBehaviour
     [Header("타이밍 설정")]
     public float startDelay = 2f;        // 첫 대사가 뜨기까지 대기 시간 (초기 페이드 시간과 맞추세요)
     public float lineFadeDuration = 0.5f; // 각 줄/슬롯이 나타나고 사라질 때 페이드 시간
+
+    [Header("텍스트 타이핑 효과")]
+    // 초당 몇 글자씩 타이핑되듯 표시할지. 0 이하로 두면 한 번에 전체 표시됨
+    public float textTypingSpeed = 25f;
 
     [Header("입력 설정")]
     public KeyCode advanceKey = KeyCode.Space;
@@ -58,7 +67,14 @@ public class LullabyDialogue : MonoBehaviour
     public CanvasGroup imageToFadeOut;
     public float imageFadeOutDuration = 2f;
 
+    [Header("노래 종료 후 후일담 대사 (Lines 배열의 마지막 요소)")]
+    // [추가] 노래가 끝난 시점부터 마지막 줄이 뜨기까지 대기할 시간(초)
+    public float postSongLineDelay = 2f;
+    // 노래가 끝난 뒤 마지막 줄을 몇 초 동안 화면에 유지할지 (타이핑이 다 끝난 뒤부터 카운트됨)
+    public float postSongLineHoldDuration = 4f;
+
     [Header("엔딩 이후 씬 전환 (선택)")]
+    // 노래(endingAudioSource) 재생 시간(초). 여기서 조정한 값이 그대로 사용됩니다.
     public float musicPlayDuration = 30f;
     public float musicFadeOutDuration = 2f;
     public string nextSceneName = "Main";
@@ -68,6 +84,7 @@ public class LullabyDialogue : MonoBehaviour
     private bool isFinished = false;
     private bool isAutoAdvancing = false;
     private DialogueSlot activeSlot; // 현재 화면에 떠있는 슬롯 (화자 전환 시 이걸 먼저 숨김)
+    private float songPlayStartTime; // [디버그] endingAudioSource.Play()를 호출한 실제 시각 (Time.time 기준)
 
     void Start()
     {
@@ -122,7 +139,10 @@ public class LullabyDialogue : MonoBehaviour
 
         currentLineIndex++;
 
-        if (currentLineIndex >= lines.Length)
+        // 마지막 줄은 일반 진행에서 제외 (노래가 끝난 뒤 별도로 표시됨)
+        int normalLineCount = Mathf.Max(lines.Length - 1, 0);
+
+        if (currentLineIndex >= normalLineCount)
         {
             isFinished = true;
             StartCoroutine(EndDialogueSequence());
@@ -132,7 +152,8 @@ public class LullabyDialogue : MonoBehaviour
         StartCoroutine(TransitionToLine(lines[currentLineIndex]));
     }
 
-    // 화자에 맞는 슬롯을 찾아서, 화자가 바뀌었다면 이전 슬롯을 먼저 숨기고 새 슬롯을 보여줌
+    // 화자에 맞는 슬롯을 찾아서, 화자가 바뀌었다면 슬롯 전체를 페이드 아웃/인하고,
+    // 화자가 같으면 슬롯은 계속 켜진 채로 텍스트만 교체함 (깜빡임 없음)
     IEnumerator TransitionToLine(DialogueLine line)
     {
         isTransitioning = true;
@@ -141,15 +162,20 @@ public class LullabyDialogue : MonoBehaviour
 
         if (targetSlot != null)
         {
-            // 화자가 바뀌었다면(이전에 떠있던 슬롯과 다르면) 이전 슬롯을 통째로 페이드 아웃
-            if (activeSlot != null && activeSlot != targetSlot)
+            if (activeSlot == targetSlot)
             {
-                yield return StartCoroutine(activeSlot.HideRoutine(lineFadeDuration));
+                yield return StartCoroutine(targetSlot.SwapTextRoutine(line.text, textTypingSpeed));
             }
+            else
+            {
+                if (activeSlot != null)
+                {
+                    yield return StartCoroutine(activeSlot.HideRoutine(lineFadeDuration));
+                }
 
-            // 같은 화자가 계속 말하는 중이면 ShowRoutine이 알아서 텍스트만 교체하며 페이드함
-            yield return StartCoroutine(targetSlot.ShowRoutine(line.text, lineFadeDuration));
-            activeSlot = targetSlot;
+                yield return StartCoroutine(targetSlot.ShowRoutine(line.text, lineFadeDuration, textTypingSpeed));
+                activeSlot = targetSlot;
+            }
         }
 
         isTransitioning = false;
@@ -177,13 +203,11 @@ public class LullabyDialogue : MonoBehaviour
 
         if (spotLight != null)
         {
-            // [최적화] FadeUtility로 통합
             yield return FadeUtility.LerpFloat(spotLight.intensity, 0f, endingLightFadeDuration, v => spotLight.intensity = v);
         }
 
         if (imageToFadeOut != null)
         {
-            // [최적화] FadeUtility로 통합
             yield return FadeUtility.LerpFloat(imageToFadeOut.alpha, 0f, imageFadeOutDuration, v => imageToFadeOut.alpha = v);
         }
 
@@ -195,17 +219,43 @@ public class LullabyDialogue : MonoBehaviour
         if (endingAudioSource != null)
         {
             endingAudioSource.Play();
+            songPlayStartTime = Time.time; // [디버그] 노래가 실제로 재생을 시작한 시각 기록
+            float clipLength = endingAudioSource.clip != null ? endingAudioSource.clip.length : -1f;
+            Debug.Log($"[LullabyDialogue] 노래 재생 시작 (clip 길이={clipLength:F2}초)");
             StartCoroutine(FadeOutMusicThenLoadScene());
         }
     }
 
     IEnumerator FadeOutMusicThenLoadScene()
     {
+        // [디버그] musicPlayDuration만큼 대기 시작 (인스펙터 값이 제대로 반영되는지 확인용)
+        Debug.Log($"[LullabyDialogue] musicPlayDuration 대기 시작: {musicPlayDuration:F2}초");
+
+        // musicPlayDuration만큼 대기 (인스펙터에서 조정한 값이 그대로 적용됨)
         yield return new WaitForSeconds(musicPlayDuration);
+
+        // [디버그] 노래가 실제로 재생을 시작한 시점부터 지금까지 걸린 총 시간
+        Debug.Log($"[LullabyDialogue] 노래 시작~끝까지 총 경과 시간: {Time.time - songPlayStartTime:F2}초");
+
+        // [추가] 노래가 끝난 시점부터 postSongLineDelay만큼 더 기다린 뒤 후일담 대사를 띄움
+        yield return new WaitForSeconds(postSongLineDelay);
+
+        // Lines 배열의 마지막 줄을 후일담처럼 띄움
+        if (lines.Length > 0)
+        {
+            DialogueLine postSongLine = lines[lines.Length - 1];
+            DialogueSlot postSongSlot = GetSlotForSpeaker(postSongLine.speaker);
+
+            if (postSongSlot != null)
+            {
+                yield return StartCoroutine(postSongSlot.ShowRoutine(postSongLine.text, lineFadeDuration, textTypingSpeed));
+                yield return new WaitForSeconds(postSongLineHoldDuration);
+                yield return StartCoroutine(postSongSlot.HideRoutine(lineFadeDuration));
+            }
+        }
 
         if (endingAudioSource != null)
         {
-            // [최적화] FadeUtility로 통합
             yield return FadeUtility.LerpFloat(endingAudioSource.volume, 0f, musicFadeOutDuration, v => endingAudioSource.volume = v);
         }
 
