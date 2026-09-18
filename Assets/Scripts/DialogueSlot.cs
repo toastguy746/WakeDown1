@@ -8,7 +8,7 @@ using TMPro;
 //
 // [사용 방식 2가지]
 // - 즉시 표시(페이드 없음): Main 씬의 튜토리얼 팝업처럼 바로 나타나야 할 때 → Show(text) / Hide()
-// - [추가] 페이드로 표시: Ep.1 Story의 자장가 대사처럼 부드럽게 전환되어야 할 때 → Show(text, fadeDuration) / Hide(fadeDuration)
+// - 페이드로 표시: Ep.1 Story의 자장가 대사처럼 부드럽게 전환되어야 할 때 → Show(text, fadeDuration) / Hide(fadeDuration)
 //   완료 시점까지 기다렸다가 다음 로직을 이어가야 한다면 ShowRoutine()/HideRoutine()을 직접 StartCoroutine으로 실행하세요.
 //   예: yield return StartCoroutine(mySlot.ShowRoutine("대사", 0.5f));
 [RequireComponent(typeof(CanvasGroup))]
@@ -18,7 +18,7 @@ public class DialogueSlot : MonoBehaviour
 
     private CanvasGroup canvasGroup;
     private string currentText = null; // 현재 이 슬롯에 떠있는 텍스트 (없으면 null)
-    private Coroutine fadeCoroutine;   // [추가] 진행 중인 페이드 코루틴 참조 (중복 호출 시 정리용)
+    private Coroutine fadeCoroutine;   // 진행 중인 페이드 코루틴 참조 (중복 호출 시 정리용)
 
     void Awake()
     {
@@ -33,7 +33,7 @@ public class DialogueSlot : MonoBehaviour
     /// </summary>
     public void Show(string text)
     {
-        if (currentText == text) return; // [요청] 같은 내용이면 교체 과정 스킵
+        if (currentText == text) return; // 같은 내용이면 교체 과정 스킵
 
         StopActiveFade();
 
@@ -46,7 +46,7 @@ public class DialogueSlot : MonoBehaviour
     }
 
     /// <summary>
-    /// [추가] text를 fadeDuration에 걸쳐 페이드로 표시합니다. 완료를 기다릴 필요가 없을 때 사용하세요.
+    /// text를 fadeDuration에 걸쳐 페이드로 표시합니다. 완료를 기다릴 필요가 없을 때 사용하세요.
     /// (기다려야 한다면 ShowRoutine을 직접 StartCoroutine으로 실행하세요)
     /// </summary>
     public void Show(string text, float fadeDuration)
@@ -56,7 +56,7 @@ public class DialogueSlot : MonoBehaviour
     }
 
     /// <summary>
-    /// [추가] 이미 다른 텍스트가 떠있었다면 fadeDuration 동안 먼저 페이드 아웃 → 텍스트 교체 →
+    /// 이미 다른 텍스트가 떠있었다면 fadeDuration 동안 먼저 페이드 아웃 → 텍스트 교체 →
     /// 다시 fadeDuration 동안 페이드 인. 아무것도 안 떠있었다면 페이드 인만 실행합니다.
     /// </summary>
     public IEnumerator ShowRoutine(string text, float fadeDuration)
@@ -69,13 +69,13 @@ public class DialogueSlot : MonoBehaviour
 
         if (canvasGroup.alpha > 0f)
         {
-            yield return FadeCanvasGroup(canvasGroup.alpha, 0f, fadeDuration);
+            yield return FadeUtility.LerpFloat(canvasGroup.alpha, 0f, fadeDuration, v => canvasGroup.alpha = v); // [최적화]
         }
 
         currentText = text;
         if (dialogueText != null) dialogueText.text = text;
 
-        yield return FadeCanvasGroup(0f, 1f, fadeDuration);
+        yield return FadeUtility.LerpFloat(0f, 1f, fadeDuration, v => canvasGroup.alpha = v); // [최적화]
 
         fadeCoroutine = null;
     }
@@ -91,20 +91,20 @@ public class DialogueSlot : MonoBehaviour
         canvasGroup.blocksRaycasts = false;
     }
 
-    /// <summary>[추가] fadeDuration에 걸쳐 페이드 아웃하며 끕니다. 완료를 기다릴 필요가 없을 때 사용하세요.</summary>
+    /// <summary>fadeDuration에 걸쳐 페이드 아웃하며 끕니다. 완료를 기다릴 필요가 없을 때 사용하세요.</summary>
     public void Hide(float fadeDuration)
     {
         fadeCoroutine = StartCoroutine(HideRoutine(fadeDuration));
     }
 
-    /// <summary>[추가] Hide(fadeDuration)와 동일하지만, 완료 시점까지 기다릴 수 있도록 IEnumerator를 반환합니다.</summary>
+    /// <summary>Hide(fadeDuration)와 동일하지만, 완료 시점까지 기다릴 수 있도록 IEnumerator를 반환합니다.</summary>
     public IEnumerator HideRoutine(float fadeDuration)
     {
         StopActiveFade();
         canvasGroup.interactable = false;
         canvasGroup.blocksRaycasts = false;
 
-        yield return FadeCanvasGroup(canvasGroup.alpha, 0f, fadeDuration);
+        yield return FadeUtility.LerpFloat(canvasGroup.alpha, 0f, fadeDuration, v => canvasGroup.alpha = v); // [최적화]
 
         currentText = null;
         fadeCoroutine = null;
@@ -117,18 +117,5 @@ public class DialogueSlot : MonoBehaviour
             StopCoroutine(fadeCoroutine);
             fadeCoroutine = null;
         }
-    }
-
-    private IEnumerator FadeCanvasGroup(float from, float to, float duration)
-    {
-        float elapsed = 0f;
-        canvasGroup.alpha = from;
-        while (elapsed < duration)
-        {
-            elapsed += Time.deltaTime;
-            canvasGroup.alpha = Mathf.Lerp(from, to, elapsed / duration);
-            yield return null;
-        }
-        canvasGroup.alpha = to;
     }
 }

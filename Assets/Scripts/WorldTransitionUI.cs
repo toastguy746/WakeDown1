@@ -76,15 +76,12 @@ public class WorldTransitionUI : MonoBehaviour
         // 1. 페이드 인 (화면이 빠르게 어두워짐과 동시에 팁 글씨와 이미지가 한 몸으로 나타남)
         float fadeInTime = transitionDuration * 0.1f;
         float fadeOutTime = transitionDuration * 0.3f;
-        float timer = 0f;
 
-        while (timer < fadeInTime)
+        // [최적화] 반복되던 alpha Lerp 루프를 FadeUtility로 통합
+        if (uiCanvasGroup != null)
         {
-            timer += Time.deltaTime;
-            if (uiCanvasGroup != null) uiCanvasGroup.alpha = Mathf.Lerp(0f, 1f, timer / fadeInTime);
-            yield return null;
+            yield return FadeUtility.LerpFloat(0f, 1f, fadeInTime, v => uiCanvasGroup.alpha = v);
         }
-        if (uiCanvasGroup != null) uiCanvasGroup.alpha = 1f;
 
         // 2. 완전히 어두워진 순간 → 좌표 교환/카메라 이동 등은 GameManager 쪽 콜백에서 처리
         onScreenFullyDark?.Invoke();
@@ -98,14 +95,10 @@ public class WorldTransitionUI : MonoBehaviour
         yield return cachedWaitDarkHold;
 
         // 4. 페이드 아웃 (화면이 다시 스르륵 밝아짐)
-        timer = 0f;
-        while (timer < fadeOutTime)
+        if (uiCanvasGroup != null)
         {
-            timer += Time.deltaTime;
-            if (uiCanvasGroup != null) uiCanvasGroup.alpha = Mathf.Lerp(1f, 0f, timer / fadeOutTime);
-            yield return null;
+            yield return FadeUtility.LerpFloat(1f, 0f, fadeOutTime, v => uiCanvasGroup.alpha = v);
         }
-        if (uiCanvasGroup != null) uiCanvasGroup.alpha = 0f;
 
         // 5. 완벽히 투명해진 후 모든 UI 요소 정리
         if (sleepImage != null) sleepImage.SetActive(false);

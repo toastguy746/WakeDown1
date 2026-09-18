@@ -5,26 +5,17 @@ using UnityEngine.Rendering.Universal; // Light2D 사용을 위해 필요
 using UnityEngine.SceneManagement;     // 씬 전환을 위해 필요
 
 // 엄마와 플레이어(아이)가 번갈아 말하는 자장가 대화를 진행시키는 스크립트.
-// [변경] 대사 한 줄마다 화자(Speaker)를 지정해서, 화자에 맞는 DialogueSlot만 보이고
+// 대사 한 줄마다 화자(Speaker)를 지정해서, 화자에 맞는 DialogueSlot만 보이고
 // 다른 화자의 슬롯(스프라이트 포함)은 자동으로 숨겨지도록 처리합니다.
 //
 // [흐름]
 // 1. 씬 시작 후 startDelay만큼 기다렸다가 첫 줄이 페이드 인으로 등장
 // 2. Space(또는 자동 진행)로 다음 줄 진행:
-//    - 이전 줄과 화자가 같으면 같은 슬롯 안에서 텍스트만 교체 (기존과 동일)
-//    - 이전 줄과 화자가 다르면 이전 화자의 슬롯 전체(배경+스프라이트+텍스트)를 페이드 아웃한 뒤
-//      새 화자의 슬롯을 페이드 인
+//    - 이전 줄과 화자가 같으면 같은 슬롯 안에서 텍스트만 교체
+//    - 이전 줄과 화자가 다르면 이전 화자의 슬롯 전체를 페이드 아웃한 뒤 새 화자의 슬롯을 페이드 인
 // 3. 마지막 줄에서 한 번 더 진행하면, 마지막으로 보이던 슬롯을 페이드 아웃시키며 대사 종료 처리
 //    (스팟 라이트를 0으로 서서히 낮추고, 지정한 이미지도 함께 투명화하고, 지정한 오디오를 재생)
 // 4. 오디오 재생 후 musicPlayDuration만큼 지나면 음악을 페이드아웃하며 nextSceneName 씬으로 전환
-//
-// [Unity 설정]
-// 1. 플레이어 대사창(배경+스프라이트+자신의 Text TMP)에 CanvasGroup + DialogueSlot을 붙이고,
-//    Player Dialogue Slot 필드에 연결하세요.
-// 2. 엄마 대사창(배경+자신의 Text TMP)에도 CanvasGroup + DialogueSlot을 붙이고,
-//    Mom Dialogue Slot 필드에 연결하세요. (두 슬롯의 Text는 서로 다른 오브젝트여야 합니다)
-// 3. Lines 배열에 각 줄마다 Speaker(Player/Mom)와 대사 내용을 채우세요.
-// 4. 나머지(아이콘 버튼, 스팟 라이트, 오디오, 씬 전환 등) 설정은 기존과 동일합니다.
 public class LullabyDialogue : MonoBehaviour
 {
     public enum Speaker { Player, Mom }
@@ -76,7 +67,7 @@ public class LullabyDialogue : MonoBehaviour
     private bool isTransitioning = false; // 페이드 도중 중복 입력 방지
     private bool isFinished = false;
     private bool isAutoAdvancing = false;
-    private DialogueSlot activeSlot; // [추가] 현재 화면에 떠있는 슬롯 (화자 전환 시 이걸 먼저 숨김)
+    private DialogueSlot activeSlot; // 현재 화면에 떠있는 슬롯 (화자 전환 시 이걸 먼저 숨김)
 
     void Start()
     {
@@ -141,7 +132,7 @@ public class LullabyDialogue : MonoBehaviour
         StartCoroutine(TransitionToLine(lines[currentLineIndex]));
     }
 
-    // [변경] 화자에 맞는 슬롯을 찾아서, 화자가 바뀌었다면 이전 슬롯을 먼저 숨기고 새 슬롯을 보여줌
+    // 화자에 맞는 슬롯을 찾아서, 화자가 바뀌었다면 이전 슬롯을 먼저 숨기고 새 슬롯을 보여줌
     IEnumerator TransitionToLine(DialogueLine line)
     {
         isTransitioning = true;
@@ -186,20 +177,14 @@ public class LullabyDialogue : MonoBehaviour
 
         if (spotLight != null)
         {
-            float startIntensity = spotLight.intensity;
-            float elapsed = 0f;
-            while (elapsed < endingLightFadeDuration)
-            {
-                elapsed += Time.deltaTime;
-                spotLight.intensity = Mathf.Lerp(startIntensity, 0f, elapsed / endingLightFadeDuration);
-                yield return null;
-            }
-            spotLight.intensity = 0f;
+            // [최적화] FadeUtility로 통합
+            yield return FadeUtility.LerpFloat(spotLight.intensity, 0f, endingLightFadeDuration, v => spotLight.intensity = v);
         }
 
         if (imageToFadeOut != null)
         {
-            yield return FadeCanvasGroup(imageToFadeOut, imageToFadeOut.alpha, 0f, imageFadeOutDuration);
+            // [최적화] FadeUtility로 통합
+            yield return FadeUtility.LerpFloat(imageToFadeOut.alpha, 0f, imageFadeOutDuration, v => imageToFadeOut.alpha = v);
         }
 
         if (backgroundMusicSource != null)
@@ -220,32 +205,13 @@ public class LullabyDialogue : MonoBehaviour
 
         if (endingAudioSource != null)
         {
-            float startVolume = endingAudioSource.volume;
-            float elapsed = 0f;
-            while (elapsed < musicFadeOutDuration)
-            {
-                elapsed += Time.deltaTime;
-                endingAudioSource.volume = Mathf.Lerp(startVolume, 0f, elapsed / musicFadeOutDuration);
-                yield return null;
-            }
-            endingAudioSource.volume = 0f;
+            // [최적화] FadeUtility로 통합
+            yield return FadeUtility.LerpFloat(endingAudioSource.volume, 0f, musicFadeOutDuration, v => endingAudioSource.volume = v);
         }
 
         if (!string.IsNullOrEmpty(nextSceneName))
         {
             SceneManager.LoadScene(nextSceneName);
         }
-    }
-
-    IEnumerator FadeCanvasGroup(CanvasGroup group, float from, float to, float duration)
-    {
-        float elapsed = 0f;
-        while (elapsed < duration)
-        {
-            elapsed += Time.deltaTime;
-            group.alpha = Mathf.Lerp(from, to, elapsed / duration);
-            yield return null;
-        }
-        group.alpha = to;
     }
 }

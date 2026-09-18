@@ -551,7 +551,7 @@ CanvasGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 907438961}
   m_Enabled: 1
-  m_Alpha: 0
+  m_Alpha: 1
   m_Interactable: 1
   m_BlocksRaycasts: 1
   m_IgnoreParentGroups: 0
@@ -736,7 +736,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1172362397}
   - component: {fileID: 1172362398}
-  - component: {fileID: 1172362399}
   m_Layer: 5
   m_Name: "\uB300\uC0AC \uADF8\uB8F9"
   m_TagString: Untagged
@@ -778,19 +777,6 @@ CanvasGroup:
   m_Interactable: 1
   m_BlocksRaycasts: 1
   m_IgnoreParentGroups: 0
---- !u!114 &1172362399
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1172362396}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f5d76a559f4aca1438b0df122db33cac, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::DialogueSlot
-  dialogueText: {fileID: 2085336361}
 --- !u!1 &1284291703
 GameObject:
   m_ObjectHideFlags: 0
@@ -1023,7 +1009,7 @@ CanvasGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1385248489}
   m_Enabled: 1
-  m_Alpha: 0
+  m_Alpha: 1
   m_Interactable: 1
   m_BlocksRaycasts: 1
   m_IgnoreParentGroups: 0

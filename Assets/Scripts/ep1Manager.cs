@@ -51,18 +51,10 @@ public class ep1Manager : MonoBehaviour
 
     IEnumerator FadeInThenOscillate()
     {
-        // 1. 0.01 → 1.5까지 fadeDuration에 걸쳐 상승
-        float elapsed = 0f;
-        while (elapsed < fadeDuration)
-        {
-            elapsed += Time.deltaTime;
-            float t = Mathf.Clamp01(elapsed / fadeDuration);
-            spotLight.intensity = Mathf.Lerp(startIntensity, targetIntensity, t);
-            yield return null;
-        }
-        spotLight.intensity = targetIntensity;
+        // 1. 0.01 → 1.5까지 fadeDuration에 걸쳐 상승 ([최적화] FadeUtility로 통합)
+        yield return FadeUtility.LerpFloat(startIntensity, targetIntensity, fadeDuration, v => spotLight.intensity = v);
 
-        // 2. [추가] 이후로는 계속 oscillateMin ~ oscillateMax 사이를 부드럽게 왕복 (사인파 기반)
+        // 2. 이후로는 계속 oscillateMin ~ oscillateMax 사이를 부드럽게 왕복 (사인파 기반)
         while (true)
         {
             float wave = (Mathf.Sin(Time.time * oscillateSpeed) + 1f) * 0.5f; // 0~1 사이를 부드럽게 왕복
