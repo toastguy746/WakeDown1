@@ -516,6 +516,8 @@ Transform:
   - {fileID: 1004824176}
   - {fileID: 2104971348}
   - {fileID: 1513000973}
+  - {fileID: 1198630235}
+  - {fileID: 774945742}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &185552934
@@ -984,6 +986,8 @@ MonoBehaviour:
     \uB10C \uB098\uB791 \uAFC8\uC138\uACC4\uB97C \uC5EC\uD589\uD560\uAC70\uC57C!"
   gameManager: {fileID: 1044970685}
   nextTutorial: {fileID: 586274403}
+  choices: []
+  choiceSlot: 0
   typingSpeed: 25
   fadeDuration: 0.4
   nextTutorialPauseDuration: 1
@@ -1590,6 +1594,8 @@ MonoBehaviour:
   tutorialText: "\uC7A1\uB2F4\uC740 \uADF8\uB9CC\uD558\uACE0 \uC55E\uC73C\uB85C \uC774\uB3D9\uD574\uBCF4\uC790!"
   gameManager: {fileID: 1044970685}
   nextTutorial: {fileID: 0}
+  choices: []
+  choiceSlot: 0
   typingSpeed: 25
   fadeDuration: 0.4
   nextTutorialPauseDuration: 1
@@ -1693,6 +1699,8 @@ MonoBehaviour:
   tutorialText: "\uC77C\uC5B4\uB098!!\n\uC77C\uC5B4\uB098\uB77C\uACE0!!"
   gameManager: {fileID: 1044970685}
   nextTutorial: {fileID: 636575096}
+  choices: []
+  choiceSlot: 0
   typingSpeed: 25
   fadeDuration: 1
   nextTutorialPauseDuration: 1.5
@@ -1953,6 +1961,8 @@ MonoBehaviour:
   tutorialText: "\uC544\uB2C8 \uB09C \uC544\uBB34\uAC83\uB3C4 \uBAA8\uB974\uB294\uB370"
   gameManager: {fileID: 1044970685}
   nextTutorial: {fileID: 423705165}
+  choices: []
+  choiceSlot: 0
   typingSpeed: 25
   fadeDuration: 0.4
   nextTutorialPauseDuration: 0
@@ -2140,6 +2150,8 @@ MonoBehaviour:
   tutorialText: "\uC5EC\uAE30\uAC00.... \uC5B4\uB514\uC9C0?"
   gameManager: {fileID: 1044970685}
   nextTutorial: {fileID: 230103585}
+  choices: []
+  choiceSlot: 0
   typingSpeed: 10
   fadeDuration: 0.4
   nextTutorialPauseDuration: 1
@@ -2427,6 +2439,8 @@ MonoBehaviour:
     \uAC71\uC815\uD558\uC9C0\uB9C8!"
   gameManager: {fileID: 1044970685}
   nextTutorial: {fileID: 0}
+  choices: []
+  choiceSlot: 0
   typingSpeed: 25
   fadeDuration: 0.4
   nextTutorialPauseDuration: 1
@@ -6464,6 +6478,111 @@ CanvasGroup:
   m_Interactable: 0
   m_BlocksRaycasts: 1
   m_IgnoreParentGroups: 0
+--- !u!1 &774945741
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 774945742}
+  - component: {fileID: 774945744}
+  - component: {fileID: 774945743}
+  m_Layer: 0
+  m_Name: "\uC5B4\uCA4C\uB77C\uB294\uAC74\uC9C0\uD558\uB098\uB3C4\uBAA8\uB974\uACA0\uAD6C\uC5F0"
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &774945742
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 774945741}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 86.14, y: -11.33, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 179949104}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &774945743
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 774945741}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7d764754b18981344a9eaf54a915b093, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialTrigger
+  targetSlot: 1
+  tutorialText: "\uC5B4\uCA4C\uB77C\uB294\uAC74\uC9C0\uD558\uB098\uB3C4\uBAA8\uB974\uACA0\uAD6C\uC5F0"
+  gameManager: {fileID: 1044970685}
+  nextTutorial: {fileID: 0}
+  choices: []
+  choiceSlot: 0
+  typingSpeed: 25
+  fadeDuration: 0.4
+  nextTutorialPauseDuration: 1
+  releasesIntroFade: 0
+  unlocksWalk: 0
+  unlocksJump: 0
+  unlocksWorldSwitch: 0
+  playerTag: Player
+--- !u!61 &774945744
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 774945741}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 1
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 1.8816795, y: -0.19546652}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0, y: 0}
+    oldSize: {x: 0, y: 0}
+    newSize: {x: 0, y: 0}
+    adaptiveTilingThreshold: 0
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  m_Size: {x: 4.763359, y: 0.60906696}
+  m_EdgeRadius: 0
 --- !u!1 &788903006
 GameObject:
   m_ObjectHideFlags: 0
@@ -6864,6 +6983,8 @@ MonoBehaviour:
     \uB20C\uB7EC\uC11C \uB2E4\uC2DC \uB3CC\uC544\uAC00\uC790!"
   gameManager: {fileID: 1044970685}
   nextTutorial: {fileID: 0}
+  choices: []
+  choiceSlot: 0
   typingSpeed: 25
   fadeDuration: 0.4
   nextTutorialPauseDuration: 1
@@ -7448,6 +7569,111 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1122765474}
   m_CullTransparentMesh: 1
+--- !u!1 &1198630234
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1198630235}
+  - component: {fileID: 1198630237}
+  - component: {fileID: 1198630236}
+  m_Layer: 0
+  m_Name: "\uC5ED\uC2DC \uADF8\uB7AC\uAD6C\uB098! \uC660\uC9C0 \uBFCC\uB4EF\uD574\uC9C0\uB124....\u314E\u314E"
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1198630235
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1198630234}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 86.14, y: -11.33, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 179949104}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1198630236
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1198630234}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7d764754b18981344a9eaf54a915b093, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialTrigger
+  targetSlot: 1
+  tutorialText: "\uC5ED\uC2DC \uADF8\uB7AC\uAD6C\uB098! \uC660\uC9C0 \uBFCC\uB4EF\uD574\uC9C0\uB124....\u314E\u314E"
+  gameManager: {fileID: 1044970685}
+  nextTutorial: {fileID: 0}
+  choices: []
+  choiceSlot: 0
+  typingSpeed: 25
+  fadeDuration: 0.4
+  nextTutorialPauseDuration: 1
+  releasesIntroFade: 0
+  unlocksWalk: 0
+  unlocksJump: 0
+  unlocksWorldSwitch: 0
+  playerTag: Player
+--- !u!61 &1198630237
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1198630234}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 1
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 1.8816795, y: -0.19546652}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0, y: 0}
+    oldSize: {x: 0, y: 0}
+    newSize: {x: 0, y: 0}
+    adaptiveTilingThreshold: 0
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  m_Size: {x: 4.763359, y: 0.60906696}
+  m_EdgeRadius: 0
 --- !u!1 &1237754918
 GameObject:
   m_ObjectHideFlags: 0
@@ -7852,6 +8078,12 @@ MonoBehaviour:
     \uB05D\uB09C\uAC70\uAC19\uB124!\n\uAFC8\uC138\uACC4\uB294 \uC5B4\uB560\uC5B4?\n"
   gameManager: {fileID: 1044970685}
   nextTutorial: {fileID: 0}
+  choices:
+  - label: "\uC88B\uC558\uC5B4"
+    target: {fileID: 1198630236}
+  - label: "\uC88B\uAC19\uC558\uC5B4"
+    target: {fileID: 774945743}
+  choiceSlot: 0
   typingSpeed: 25
   fadeDuration: 0.4
   nextTutorialPauseDuration: 1
@@ -8167,6 +8399,8 @@ MonoBehaviour:
     \uBC18\uB300\uB85C \uB418\uB2C8 \uC8FC\uC758\uD558\uC790!"
   gameManager: {fileID: 1044970685}
   nextTutorial: {fileID: 0}
+  choices: []
+  choiceSlot: 0
   typingSpeed: 25
   fadeDuration: 0.4
   nextTutorialPauseDuration: 1
@@ -8273,6 +8507,8 @@ MonoBehaviour:
     \uBC18\uB300\uC138\uACC4\uB85C \uC774\uB3D9\uD558\uBA74\uB3FC!\nc\uB97C \uB20C\uB7EC\uBCF4\uC790!"
   gameManager: {fileID: 1044970685}
   nextTutorial: {fileID: 1540288724}
+  choices: []
+  choiceSlot: 0
   typingSpeed: 25
   fadeDuration: 0.4
   nextTutorialPauseDuration: 1
@@ -8592,6 +8828,8 @@ MonoBehaviour:
     \uC218 \uC788\uC5B4!"
   gameManager: {fileID: 1044970685}
   nextTutorial: {fileID: 0}
+  choices: []
+  choiceSlot: 0
   typingSpeed: 25
   fadeDuration: 0.4
   nextTutorialPauseDuration: 1
@@ -10755,6 +10993,8 @@ MonoBehaviour:
   tutorialText: "(\uC55E\uC73C\uB85C \uACC4\uC18D \uC774\uB3D9\uD558\uC790)"
   gameManager: {fileID: 1044970685}
   nextTutorial: {fileID: 0}
+  choices: []
+  choiceSlot: 0
   typingSpeed: 25
   fadeDuration: 0.4
   nextTutorialPauseDuration: 1
@@ -10956,7 +11196,8 @@ GameObject:
   - component: {fileID: 2104971350}
   - component: {fileID: 2104971349}
   m_Layer: 0
-  m_Name: "(\uACC4\uC18D \uC55E\uC73C\uB85C \uC804\uC9C4\uD558\uC790 2\uD2B8)"
+  m_Name: "(\uC55E\uC73C\uB85C \uAC00\uB294 \uAE38\uC740 \uB9C9\uD600\uC788\uB294\uAC70
+    \uAC19\uB2E4)"
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -10990,9 +11231,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TutorialTrigger
   targetSlot: 0
-  tutorialText: "(\uAE38\uC740 \uB9C9\uD600\uC788\uB294\uAC83 \uAC19)"
+  tutorialText: "(\uC55E\uC73C\uB85C \uAC00\uB294 \uAE38\uC740 \uB9C9\uD600\uC788\uB294\uAC70
+    \uAC19\uB2E4)"
   gameManager: {fileID: 1044970685}
   nextTutorial: {fileID: 0}
+  choices: []
+  choiceSlot: 0
   typingSpeed: 25
   fadeDuration: 0.4
   nextTutorialPauseDuration: 1

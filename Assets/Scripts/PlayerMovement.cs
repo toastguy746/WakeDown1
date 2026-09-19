@@ -50,18 +50,11 @@ public class PlayerMovement : MonoBehaviour
 
     void Update()
     {
-        // 게임 매니저가 움직임을 막았으면(컷씬/튜토리얼 진행 중) 속도를 0으로 만들고 대기
-        if (!canMove)
-        {
-            moveInput = 0;
-            anim.SetBool(IsWalkingHash, false);
-            rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
-            if (playerAudio != null) playerAudio.SetWalking(false); // 움직임이 막히면 발소리도 즉시 정지
-            return;
-        }
-
-        // 1. 키보드 좌우 입력 감지 ([변경] canWalk가 해금되지 않았으면 입력을 아예 무시)
-        moveInput = canWalk ? Input.GetAxisRaw("Horizontal") : 0f;
+        // 1. 키보드 좌우 입력 감지
+        // [변경] canMove가 꺼져있으면(대화/컷씬 진행 중) 좌우 이동은 막되, 더 이상 여기서 함수를
+        // 통째로 return하지 않습니다 — 아래 점프 체크는 canMove와 무관하게 계속 실행되어야
+        // 대화창이 떠있는 동안에도 점프는 가능하게 할 수 있습니다.
+        moveInput = (canMove && canWalk) ? Input.GetAxisRaw("Horizontal") : 0f;
 
         // 꿈 세계에 있을 때는 A/D(좌우) 진행 방향을 반대로 뒤집음
         if (isInDream)
@@ -78,6 +71,7 @@ public class PlayerMovement : MonoBehaviour
         }
 
         // 3. 바닥 체크 (Wall 레이어도 함께 인식해서 벽을 밟고 있어도 점프 가능하게 함)
+        // canMove가 꺼져있어도 점프를 위해 계속 갱신되어야 함
         isGrounded = Physics2D.OverlapCircle(groundCheck.position, checkRadius, groundLayer | wallLayer);
         anim.SetBool(IsJumpingHash, !isGrounded);
 
@@ -90,12 +84,13 @@ public class PlayerMovement : MonoBehaviour
         // 현재 바닥 상태를 다음 프레임에서 기억할 수 있도록 저장
         wasGrounded = isGrounded;
 
-        // 발소리 제어 호출 (걷고 있는 상태이면서 동시에 바닥에 붙어있을 때만 소리 나게 설정)
+        // 발소리 제어 호출 (canMove가 꺼져있으면 moveInput이 이미 0이라 isMoving도 false라서 자연히 멈춤)
         bool isWalking = isMoving && isGrounded;
         if (playerAudio != null) playerAudio.SetWalking(isWalking);
 
-        // 4. 스페이스바 점프 입력 ([변경] canJump이 해금되지 않았으면 점프 입력 무시)
-        if (canJump && Input.GetKeyDown(KeyCode.Space) && isGrounded)
+        // 4. 스페이스바 점프 입력
+        // [변경] 대화창(튜토리얼) 등으로 canMove가 꺼져있으면 점프도 함께 막힘
+        if (canMove && canJump && Input.GetKeyDown(KeyCode.Space) && isGrounded)
         {
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
             anim.SetBool(IsJumpingHash, true);
@@ -104,9 +99,8 @@ public class PlayerMovement : MonoBehaviour
 
     void FixedUpdate()
     {
-        if (!canMove) return;
-
-        // 5. 물리 엔진 기반 좌우 이동 (canWalk가 꺼져있으면 moveInput이 이미 0이라 자연스럽게 정지됨)
+        // [변경] canMove가 꺼져있어도 FixedUpdate는 계속 돌아야 점프의 수직 속도가 그대로 유지됩니다.
+        // moveInput은 canMove가 꺼져있으면 이미 0으로 고정되어 있으므로, 좌우 이동만 자연스럽게 멈춥니다.
         rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
     }
 

@@ -61,6 +61,7 @@ public class GameManager : MonoBehaviour
     // 각 TutorialTrigger가 자기 자신의 값(typingSpeed, fadeDuration, nextTutorialPauseDuration)으로 갖고 있습니다.
 
     private bool isTutorialInProgress = false; // 다른 튜토리얼이 재생 중인지 잠금 플래그
+    private TutorialTrigger pendingChoiceResult; // [추가] RunChoiceSelection이 고른 결과를 담아두는 임시 필드
 
     private bool isSwitching = false;
     private Transform playerTransform;
@@ -100,8 +101,9 @@ public class GameManager : MonoBehaviour
             petGhostTransform.position = new Vector3(spiritPos.x, petGhostY, spiritPos.z);
         }
 
-        // 세계 전환 키 입력 → 버튼 클릭 시뮬레이션으로 통일 ([변경] canSwitchWorld가 해금되지 않았으면 무시)
-        if (canSwitchWorld && Input.GetKeyDown(switchWorldKey) && !isSwitching)
+        // 세계 전환 키 입력 → 버튼 클릭 시뮬레이션으로 통일
+        // ([변경] canSwitchWorld가 해금되지 않았거나, 대화창(튜토리얼)이 떠있는 동안에는 무시)
+        if (canSwitchWorld && Input.GetKeyDown(switchWorldKey) && !isSwitching && !isTutorialInProgress)
         {
             SimulateWorldStateButtonPress();
         }
@@ -289,19 +291,39 @@ public class GameManager : MonoBehaviour
                 }
             }
 
-            TutorialTrigger next = current.nextTutorial;
+            // [추가] Choices가 있으면 Next Tutorial 대신 플레이어가 고른 선택지의 target으로 이어짐
+            TutorialTrigger next;
 
-            if (slot != null)
+            if (current.choices != null && current.choices.Length > 0)
             {
-                if (next != null)
+                // [수정] 선택지 슬롯(보통 Player)을 띄우기 전에, 현재 질문이 떠있던 슬롯(보통 Spirit)부터
+                // 먼저 정리해야 두 텍스트가 겹쳐 보이지 않음
+                if (slot != null)
                 {
-                    Debug.Log($"[Tutorial] 체인 전환: '{current.name}' → '{next.name}' ({current.fadeDuration}초 페이드아웃 + {current.nextTutorialPauseDuration}초 텀)");
+                    Debug.Log($"[Tutorial] '{current.name}' 선택지 진입 전 기존 슬롯 정리 ({current.fadeDuration}초 페이드아웃 + {current.nextTutorialPauseDuration}초 텀)");
                     yield return StartCoroutine(slot.HideRoutine(current.fadeDuration));
                     yield return new WaitForSeconds(current.nextTutorialPauseDuration);
                 }
-                else
+
+                yield return StartCoroutine(RunChoiceSelection(current));
+                next = pendingChoiceResult;
+            }
+            else
+            {
+                next = current.nextTutorial;
+
+                if (slot != null)
                 {
-                    slot.Hide();
+                    if (next != null)
+                    {
+                        Debug.Log($"[Tutorial] 체인 전환: '{current.name}' → '{next.name}' ({current.fadeDuration}초 페이드아웃 + {current.nextTutorialPauseDuration}초 텀)");
+                        yield return StartCoroutine(slot.HideRoutine(current.fadeDuration));
+                        yield return new WaitForSeconds(current.nextTutorialPauseDuration);
+                    }
+                    else
+                    {
+                        slot.Hide();
+                    }
                 }
             }
 
@@ -388,6 +410,82 @@ public class GameManager : MonoBehaviour
     private DialogueSlot GetSlotForTutorial(TutorialTrigger trigger)
     {
         return trigger.targetSlot == TutorialTrigger.TargetSlot.Player ? playerDialogueSlot : spiritDialogueSlot;
+    }
+
+    // [추가] trigger.choices를 trigger.choiceSlot에 목록으로 띄우고, 방향키로 커서를 옮기다가
+    // tutorialAdvanceKey로 확정하면 pendingChoiceResult에 선택된 target을 담아둡니다.
+    // 스토리 분기가 아니라 "다음 대사"만 바꾸는 용도이므로, 확정 후 슬롯을 따로 정리하지 않고
+    // 다음 트리거의 ShowRoutine이 이 텍스트를 페이드 아웃하며 자연스럽게 덮어쓰게 둡니다.
+    IEnumerator RunChoiceSelection(TutorialTrigger trigger)
+    {
+        DialogueSlot choiceSlotRef = trigger.choiceSlot == TutorialTrigger.TargetSlot.Player ? playerDialogueSlot : spiritDialogueSlot;
+
+        if (choiceSlotRef == null)
+        {
+            Debug.LogWarning($"[Tutorial] '{trigger.name}'의 Choice Slot이 GameManager에 연결되어 있지 않습니다. 선택지 없이 종료합니다.");
+            pendingChoiceResult = null;
+            yield break;
+        }
+
+        int selectedIndex = 0;
+        RenderChoices(choiceSlotRef, trigger.choices, selectedIndex);
+        Debug.Log($"[Tutorial] '{trigger.name}' 선택지 {trigger.choices.Length}개 표시 — 방향키로 고르고 {tutorialAdvanceKey}로 확정");
+
+        yield return null; // 직전 입력이 그대로 씹혀서 즉시 확정되는 것을 방지
+
+        while (true)
+        {
+            if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S))
+            {
+                selectedIndex = (selectedIndex + 1) % trigger.choices.Length;
+                RenderChoices(choiceSlotRef, trigger.choices, selectedIndex);
+            }
+            else if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W))
+            {
+                selectedIndex = (selectedIndex - 1 + trigger.choices.Length) % trigger.choices.Length;
+                RenderChoices(choiceSlotRef, trigger.choices, selectedIndex);
+            }
+            else if (Input.GetKeyDown(tutorialAdvanceKey))
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        TutorialTrigger.DialogueChoice chosen = trigger.choices[selectedIndex];
+        pendingChoiceResult = chosen.target;
+        Debug.Log($"[Tutorial] 선택지 확정: \"{chosen.label}\" → 다음: {(chosen.target != null ? chosen.target.name : "(없음, 종료)")}");
+
+        // [추가] 고르지 않은 나머지 선택지들의 target은 다시 쓰일 일이 없으므로 여기서 정리함
+        // (같은 target을 여러 선택지가 공유하는 합류 구조일 수 있으니, 선택된 target과 같은 건 건너뜀)
+        foreach (TutorialTrigger.DialogueChoice choice in trigger.choices)
+        {
+            if (choice == chosen) continue;
+            if (choice.target == null || choice.target == chosen.target) continue;
+            if (choice.target.gameObject == null) continue;
+
+            Debug.Log($"[Tutorial] 선택되지 않은 분기 정리: '{choice.target.name}' Destroy");
+            Destroy(choice.target.gameObject);
+        }
+    }
+
+    // 선택지 목록을 한 줄씩, 현재 커서가 있는 항목만 "▶ " 표시로 구분해서 슬롯에 즉시 표시
+    private void RenderChoices(DialogueSlot slot, TutorialTrigger.DialogueChoice[] choices, int selectedIndex)
+    {
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+
+        for (int i = 0; i < choices.Length; i++)
+        {
+            sb.Append(i == selectedIndex ? "▶ " : "   ");
+            sb.Append(choices[i].label);
+            sb.Append('\n'); // 안내 문구를 위해 항상 개행 (마지막 선택지 뒤에도 붙음)
+        }
+
+        // [추가] 조작법을 몰라서 헤매지 않도록 화면에 직접 안내 문구를 같이 표시
+        sb.Append($"\n(↑/↓ 이동, {tutorialAdvanceKey}로 선택)");
+
+        slot.Show(sb.ToString());
     }
 
     IEnumerator RunPageDisplayWithSkip(DialogueSlot slot, IEnumerator displayRoutine)

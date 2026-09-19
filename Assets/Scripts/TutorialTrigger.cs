@@ -17,6 +17,13 @@ using UnityEngine;
 // (Next Tutorial로 지정된 오브젝트는 자기 콜라이더로 직접 트리거될 필요가 없습니다 —
 //  체인으로 소비되는 시점에 자동으로 Destroy됩니다.)
 //
+// [선택지 분기]
+// Choices에 1개 이상 항목을 넣으면, 이 튜토리얼이 끝난 뒤 Next Tutorial 대신 여기서
+// 플레이어가 고른 선택지의 target으로 이어집니다. 방향키(위/아래)로 커서를 옮기고
+// Tutorial Advance Key(기본 Space)로 확정합니다. 선택 결과는 "다음 대사"만 바꾸는 용도로
+// 쓰도록 설계되어 있습니다 — 각 선택지의 target이 서로 다른 후속 트리거를 가리키더라도,
+// 그 트리거들의 Next Tutorial을 같은 곳으로 맞춰두면 자연스럽게 스토리가 다시 합류합니다.
+//
 // [진행 중 잠금]
 // 어떤 튜토리얼이 재생 중일 때 다른 튜토리얼 트리거에 플레이어가 닿아도 무시됩니다.
 // 이때 해당 트리거는 파괴되지 않으므로, 플레이어가 나갔다가 다시 들어오면 그때 다시 시도됩니다.
@@ -56,7 +63,23 @@ public class TutorialTrigger : MonoBehaviour
 
     [Header("다음 튜토리얼과 연결 (선택)")]
     // 지정하면, 이 튜토리얼이 끝난 직후 플레이어 이동 없이 곧바로 다음 튜토리얼이 이어서 재생됩니다.
+    // [주의] 아래 Choices가 1개 이상 있으면 이 필드는 무시되고 Choices 쪽이 우선합니다.
     public TutorialTrigger nextTutorial;
+
+    [System.Serializable]
+    public class DialogueChoice
+    {
+        public string label;           // 선택지로 보여줄 텍스트 (예: "좋았어")
+        public TutorialTrigger target; // 이 선택지를 고르면 이어서 재생될 튜토리얼 (비워두면 그대로 종료)
+    }
+
+    [Header("선택지 (선택) — 있으면 Next Tutorial 대신 여기서 플레이어가 고른 것으로 이어집니다")]
+    // 예: 정령이 질문 → 이 선택지가 플레이어 슬롯에 뜸 → 고른 답변의 target 트리거가 이어서 재생.
+    // 두 선택지의 target이 서로 다른 후속 대사를 갖더라도, 그 다음 nextTutorial을 같은 곳으로
+    // 맞춰두면 "대답만 다르고 이후 스토리는 합류"하는 구조를 만들 수 있습니다.
+    public DialogueChoice[] choices;
+    // 선택지 목록을 표시할 슬롯. 보통 "플레이어가 대답을 고르는" 상황이므로 기본값은 Player입니다.
+    public TargetSlot choiceSlot = TargetSlot.Player;
 
     [Header("이 튜토리얼의 연출 설정")]
     // 이 튜토리얼의 텍스트가 타이핑되는 속도(초당 글자 수). 0 이하면 즉시 전체 표시됨
