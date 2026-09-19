@@ -2,7 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
-using UnityEngine.Rendering.Universal; // [추가] Light2D(Global/Spot) 제어를 위해 필요
+using UnityEngine.Rendering.Universal; // Light2D(Global/Spot) 제어를 위해 필요
 
 public class GameManager : MonoBehaviour
 {
@@ -26,6 +26,9 @@ public class GameManager : MonoBehaviour
     public float transitionDuration = 2f;
 
     [Header("월드 전환 입력 설정")]
+    // [추가] 기본적으로 잠겨있다가, Unlocks World Switch가 체크된 TutorialTrigger가 끝나면 true로 바뀜.
+    // false인 동안은 C키를 눌러도 아무 일도 일어나지 않습니다.
+    public bool canSwitchWorld = false;
     public KeyCode switchWorldKey = KeyCode.C;
 
     [Header("꿈/현실 표시 버튼")]
@@ -34,7 +37,7 @@ public class GameManager : MonoBehaviour
     public Color dreamColor = new Color(0.6f, 0.2f, 0.9f);
 
     [Header("라이트 연동")]
-    // [추가] 현실/꿈 전환에 맞춰 밝기를 바꿀 Light2D들
+    // 현실/꿈 전환에 맞춰 밝기를 바꿀 Light2D들
     public Light2D globalLight;               // 전체를 비추는 Global Light 2D
     public float realityGlobalIntensity = 0.01f;
     public float dreamGlobalIntensity = 0.8f;
@@ -44,9 +47,20 @@ public class GameManager : MonoBehaviour
     public float dreamSpiritSpotIntensity = 0f;
 
     [Header("튜토리얼 대화 슬롯")]
-    // [추가] 플레이어/정령 각각의 대화 슬롯. TutorialTrigger가 닿았을 때 이 중 하나에 대사를 띄움
+    // 플레이어/정령 각각의 대화 슬롯. TutorialTrigger가 닿았을 때 이 중 하나에 대사를 띄움
     public DialogueSlot playerDialogueSlot;
     public DialogueSlot spiritDialogueSlot;
+
+    [Header("튜토리얼 진행 설정")]
+    // 튜토리얼 페이지를 넘길 때 사용할 키. 모든 튜토리얼이 이 키 하나를 공통으로 사용합니다.
+    public KeyCode tutorialAdvanceKey = KeyCode.Space;
+    // Main 씬 시작 시 깔아둔 인트로 페이드. releasesIntroFade가 체크된 튜토리얼이 끝나면 이걸 걷어냄
+    public MainSceneIntroFade introFade;
+
+    // 타이핑 속도/체인 페이드 인·아웃 시간/다음 튜토리얼 대기 텀은 GameManager가 아니라
+    // 각 TutorialTrigger가 자기 자신의 값(typingSpeed, fadeDuration, nextTutorialPauseDuration)으로 갖고 있습니다.
+
+    private bool isTutorialInProgress = false; // 다른 튜토리얼이 재생 중인지 잠금 플래그
 
     private bool isSwitching = false;
     private Transform playerTransform;
@@ -86,8 +100,8 @@ public class GameManager : MonoBehaviour
             petGhostTransform.position = new Vector3(spiritPos.x, petGhostY, spiritPos.z);
         }
 
-        // 세계 전환 키 입력 → 버튼 클릭 시뮬레이션으로 통일
-        if (Input.GetKeyDown(switchWorldKey) && !isSwitching)
+        // 세계 전환 키 입력 → 버튼 클릭 시뮬레이션으로 통일 ([변경] canSwitchWorld가 해금되지 않았으면 무시)
+        if (canSwitchWorld && Input.GetKeyDown(switchWorldKey) && !isSwitching)
         {
             SimulateWorldStateButtonPress();
         }
@@ -136,9 +150,6 @@ public class GameManager : MonoBehaviour
         }
 
         // 꿈 → 현실로 돌아온 경우에만 여기(화면이 완전히 밝아진 뒤)에서 정령을 복귀시킴.
-        // → 화면 전환 중에는 정령이 잠들었던 자리에 그대로 있다가, 화면이 다 밝아진 뒤
-        //   눈앞에서 대시/순간이동으로 복귀하는 연출이 나옴 (반대로 꿈에 들어갈 때는
-        //   화면이 검은 동안 SwapWorldsAtMidpoint에서 즉시 처리됨 - 아래 참고)
         if (!isDream && spirit != null)
         {
             spirit.EnterReality();
@@ -146,8 +157,6 @@ public class GameManager : MonoBehaviour
 
         if (playerScript != null) playerScript.canMove = true;
         isSwitching = false;
-
-        CheckDoorOverlapAfterSwitch();
     }
 
     // 화면이 완전히 어두워진 순간 실행: 좌표 교환 + 세계 상태 토글 + 카메라/버튼 갱신
@@ -182,31 +191,9 @@ public class GameManager : MonoBehaviour
         UpdateWorldStateButtonColor();
         UpdateLightsForCurrentWorld();
 
-        // 현실 → 꿈으로 들어가는 경우: 위치 교환이 이미 끝났으니 이 시점(화면이 검은 동안)에
-        // 곧바로 중력을 켜서 잠들게 함. 꿈 → 현실 복귀는 SwitchWorldSequence()에서 화면이
-        // 다 밝아진 뒤 별도로 처리 (EnterReality는 여기서 호출하지 않음)
         if (spirit != null && isDream)
         {
             spirit.EnterDream();
-        }
-    }
-
-    // ================================================================
-    // 문 겹침 검사 (순간이동으로 문과 겹친 채 도착한 경우 대비)
-    // ================================================================
-
-    void CheckDoorOverlapAfterSwitch()
-    {
-        if (playerCollider == null) return;
-
-        ExitDoor[] doors = FindObjectsByType<ExitDoor>(FindObjectsInactive.Exclude);
-        for (int i = 0; i < doors.Length; i++)
-        {
-            Collider2D doorCollider = doors[i].GetComponent<Collider2D>();
-            if (doorCollider != null && playerCollider.IsTouching(doorCollider))
-            {
-                doors[i].TryTriggerExit(playerCollider);
-            }
         }
     }
 
@@ -222,7 +209,6 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // [추가] 현재 isDream 값에 맞춰 Global Light와 정령의 Spot Light 밝기를 갱신
     void UpdateLightsForCurrentWorld()
     {
         if (globalLight != null)
@@ -261,11 +247,177 @@ public class GameManager : MonoBehaviour
     // 튜토리얼 대화 슬롯 (TutorialTrigger가 호출)
     // ================================================================
 
-    // [추가] TutorialTrigger가 닿을 때 호출. 어느 슬롯이든 로직은 완전히 동일하게 재사용
-    // (DialogueSlot이 "같으면 스킵, 다르면 교체"를 알아서 처리하므로 여기서 분기할 게 없음)
-    public void ShowTutorialDialogue(TutorialTrigger.TargetSlot slot, string text)
+    /// <summary>
+    /// TutorialTrigger가 플레이어와 충돌했을 때 호출합니다. 이미 다른 튜토리얼이 진행 중이거나
+    /// C키로 세계 전환(꿈/현실) 중일 때는 아무 일도 하지 않고 무시합니다.
+    /// </summary>
+    public void StartTutorial(TutorialTrigger trigger)
     {
-        DialogueSlot target = slot == TutorialTrigger.TargetSlot.Player ? playerDialogueSlot : spiritDialogueSlot;
-        if (target != null) target.Show(text);
+        if (isTutorialInProgress || isSwitching || trigger == null) return;
+        StartCoroutine(RunTutorialChain(trigger));
+    }
+
+    IEnumerator RunTutorialChain(TutorialTrigger firstTrigger)
+    {
+        isTutorialInProgress = true;
+        if (playerScript != null) playerScript.canMove = false;
+
+        Debug.Log($"[Tutorial] 체인 시작: '{firstTrigger.name}'");
+
+        TutorialTrigger current = firstTrigger;
+        bool fadeInThisOne = false;
+
+        while (current != null)
+        {
+            DialogueSlot slot = GetSlotForTutorial(current);
+
+            yield return StartCoroutine(RunSingleTutorial(current, slot, fadeInThisOne));
+
+            // [추가] 이 트리거가 끝나는 시점에 체크된 능력을 해금
+            ApplyUnlocksFor(current);
+
+            if (current.releasesIntroFade)
+            {
+                if (introFade != null)
+                {
+                    Debug.Log("[Tutorial] Releases Intro Fade 체크됨 → introFade.ReleaseFade() 호출");
+                    introFade.ReleaseFade();
+                }
+                else
+                {
+                    Debug.LogWarning($"[Tutorial] '{current.name}'는 Releases Intro Fade가 체크되어 있지만, GameManager의 Intro Fade 필드가 비어있어 페이드를 해제할 수 없습니다.");
+                }
+            }
+
+            TutorialTrigger next = current.nextTutorial;
+
+            if (slot != null)
+            {
+                if (next != null)
+                {
+                    Debug.Log($"[Tutorial] 체인 전환: '{current.name}' → '{next.name}' ({current.fadeDuration}초 페이드아웃 + {current.nextTutorialPauseDuration}초 텀)");
+                    yield return StartCoroutine(slot.HideRoutine(current.fadeDuration));
+                    yield return new WaitForSeconds(current.nextTutorialPauseDuration);
+                }
+                else
+                {
+                    slot.Hide();
+                }
+            }
+
+            if (current.gameObject != null) Destroy(current.gameObject);
+            current = next;
+            fadeInThisOne = current != null;
+
+            if (current != null) Debug.Log($"[Tutorial] 체인 연결됨 → 다음: '{current.name}'");
+        }
+
+        if (playerScript != null) playerScript.canMove = true;
+        isTutorialInProgress = false;
+        Debug.Log("[Tutorial] 체인 전체 종료, 잠금 해제됨 (canMove 복구)");
+    }
+
+    // [추가] trigger에 체크된 능력 해금 플래그를 실제 플레이어/GameManager 상태에 반영
+    private void ApplyUnlocksFor(TutorialTrigger trigger)
+    {
+        if (trigger.unlocksWalk && playerScript != null)
+        {
+            playerScript.canWalk = true;
+            Debug.Log($"[Tutorial] '{trigger.name}' 완료 → 걷기(canWalk) 해금됨");
+        }
+
+        if (trigger.unlocksJump && playerScript != null)
+        {
+            playerScript.canJump = true;
+            Debug.Log($"[Tutorial] '{trigger.name}' 완료 → 점프(canJump) 해금됨");
+        }
+
+        if (trigger.unlocksWorldSwitch)
+        {
+            canSwitchWorld = true;
+            Debug.Log($"[Tutorial] '{trigger.name}' 완료 → 월드전환(canSwitchWorld) 해금됨");
+        }
+    }
+
+    IEnumerator RunSingleTutorial(TutorialTrigger trigger, DialogueSlot slot, bool fadeIn)
+    {
+        string[] pages = trigger.GetPages();
+
+        if (slot == null)
+        {
+            Debug.LogWarning($"[Tutorial] '{trigger.name}'의 대상 슬롯이 GameManager에 연결되어 있지 않습니다 (Player/Spirit Dialogue Slot 확인 필요). 대사 표시 없이 건너뜁니다.");
+            yield break;
+        }
+        if (pages.Length == 0)
+        {
+            Debug.LogWarning($"[Tutorial] '{trigger.name}'의 Tutorial Text가 비어 있습니다. 대사 표시 없이 건너뜁니다.");
+            yield break;
+        }
+
+        Debug.Log($"[Tutorial] '{trigger.name}' 시작 — 페이지 {pages.Length}개, 슬롯={slot.name}, 페이드인={fadeIn}");
+
+        for (int i = 0; i < pages.Length; i++)
+        {
+            IEnumerator displayRoutine;
+            if (i == 0)
+            {
+                if (fadeIn)
+                {
+                    displayRoutine = slot.ShowRoutine(pages[i], trigger.fadeDuration, trigger.typingSpeed);
+                }
+                else
+                {
+                    displayRoutine = slot.ShowRoutine(pages[i], 0f, trigger.typingSpeed);
+                }
+            }
+            else
+            {
+                displayRoutine = slot.SwapTextRoutine(pages[i], trigger.typingSpeed);
+            }
+
+            yield return StartCoroutine(RunPageDisplayWithSkip(slot, displayRoutine));
+
+            Debug.Log($"[Tutorial] 페이지 {i + 1}/{pages.Length} 표시 완료: \"{pages[i]}\" — {tutorialAdvanceKey} 입력 대기 중");
+            yield return WaitForTutorialAdvanceKey();
+            Debug.Log($"[Tutorial] {tutorialAdvanceKey} 입력 감지됨");
+        }
+
+        Debug.Log($"[Tutorial] '{trigger.name}' 대사 표시 종료");
+    }
+
+    private DialogueSlot GetSlotForTutorial(TutorialTrigger trigger)
+    {
+        return trigger.targetSlot == TutorialTrigger.TargetSlot.Player ? playerDialogueSlot : spiritDialogueSlot;
+    }
+
+    IEnumerator RunPageDisplayWithSkip(DialogueSlot slot, IEnumerator displayRoutine)
+    {
+        bool isDone = false;
+        StartCoroutine(RunAndMarkDone(displayRoutine, () => isDone = true));
+
+        yield return null;
+        while (!isDone)
+        {
+            if (Input.GetKeyDown(tutorialAdvanceKey))
+            {
+                slot.SkipTyping();
+            }
+            yield return null;
+        }
+    }
+
+    IEnumerator RunAndMarkDone(IEnumerator routine, System.Action onDone)
+    {
+        yield return StartCoroutine(routine);
+        onDone();
+    }
+
+    IEnumerator WaitForTutorialAdvanceKey()
+    {
+        yield return null;
+        while (!Input.GetKeyDown(tutorialAdvanceKey))
+        {
+            yield return null;
+        }
     }
 }

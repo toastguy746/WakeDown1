@@ -24,6 +24,7 @@ public class DialogueSlot : MonoBehaviour
     private CanvasGroup canvasGroup;
     private string currentText = null; // 현재 이 슬롯에 떠있는 텍스트 (없으면 null)
     private Coroutine fadeCoroutine;   // 진행 중인 페이드/타이핑 코루틴 참조 (중복 호출 시 정리용)
+    private bool skipTypingRequested = false; // [추가] 타이핑 도중 전체 텍스트를 즉시 표시해달라는 요청 플래그
 
     void Awake()
     {
@@ -136,13 +137,30 @@ public class DialogueSlot : MonoBehaviour
     {
         float delay = 1f / charsPerSecond;
         StringBuilder sb = new StringBuilder();
+        skipTypingRequested = false; // 이전 타이핑에서 남아있을 수 있는 요청 초기화
 
         for (int i = 0; i < text.Length; i++)
         {
+            if (skipTypingRequested)
+            {
+                dialogueText.text = text; // 남은 글자를 전부 채워서 즉시 완성
+                skipTypingRequested = false;
+                yield break;
+            }
+
             sb.Append(text[i]);
             dialogueText.text = sb.ToString();
             yield return new WaitForSeconds(delay);
         }
+    }
+
+    /// <summary>
+    /// [추가] 타이핑이 진행 중일 때 호출하면, 남은 글자를 전부 채워 즉시 전체 텍스트를 표시합니다.
+    /// 타이핑 중이 아닐 때 호출해도 안전합니다 (아무 효과 없음).
+    /// </summary>
+    public void SkipTyping()
+    {
+        skipTypingRequested = true;
     }
 
     /// <summary>이 슬롯을 즉시 끕니다 (페이드 없음).</summary>

@@ -1,14 +1,44 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 // 보이지 않는 튜토리얼 트리거 오브젝트에 붙이는 스크립트.
-// 플레이어가 닿으면 지정한 슬롯(플레이어용/정령용)에 튜토리얼 대사를 띄우고,
-// 한 번 실행된 뒤 스스로 사라집니다.
+// 플레이어가 닿으면 GameManager에게 "이 튜토리얼을 시작해줘"라고 요청만 하고,
+// 실제 페이지 넘김/잠금/체인 진행은 전부 GameManager가 코루틴으로 처리합니다.
+//
+// [멀티 페이지 대사]
+// Tutorial Text 인스펙터(TextArea)에서 Enter로 줄을 나누면, 그 줄 하나하나가
+// "한 번에 슬롯에 표시되는 페이지"가 됩니다. 플레이어가 advanceKey(GameManager의
+// Tutorial Advance Key, 기본 Space)를 누를 때마다 다음 줄로 넘어가고,
+// 마지막 줄에서 한 번 더 누르면 이 튜토리얼이 완전히 종료됩니다.
+//
+// [다른 튜토리얼과 연결]
+// Next Tutorial에 다른 TutorialTrigger를 연결하면, 이 튜토리얼이 끝나는 즉시
+// 플레이어가 걸어가지 않아도 곧바로 Next Tutorial의 대사가 이어서 재생됩니다.
+// (Next Tutorial로 지정된 오브젝트는 자기 콜라이더로 직접 트리거될 필요가 없습니다 —
+//  체인으로 소비되는 시점에 자동으로 Destroy됩니다.)
+//
+// [진행 중 잠금]
+// 어떤 튜토리얼이 재생 중일 때 다른 튜토리얼 트리거에 플레이어가 닿아도 무시됩니다.
+// 이때 해당 트리거는 파괴되지 않으므로, 플레이어가 나갔다가 다시 들어오면 그때 다시 시도됩니다.
+//
+// [추가] 능력 해금
+// 이 튜토리얼의 대사가 전부 끝나는 순간, 체크해둔 능력이 플레이어에게 영구적으로 해금됩니다
+// (PlayerMovement.canWalk/canJump, GameManager.canSwitchWorld). 기본 상태에서 플레이어는
+// 걷기/점프/C키 월드전환이 전부 잠겨있으므로, 원하는 진행 순서대로 트리거를 배치하고
+// 그에 맞는 체크박스를 켜두면 됩니다.
 //
 // [Unity 설정]
 // 1. 보이지 않는(스프라이트 없는) 오브젝트를 만들고 Collider2D(Is Trigger 체크)를 붙이세요.
 // 2. 이 스크립트를 붙이고, Game Manager 필드에 GameManager 오브젝트를 연결하세요.
 // 3. Target Slot에서 이 튜토리얼이 플레이어용/정령용 슬롯 중 어디에 뜰지 고르세요.
-// 4. Tutorial Text에 이 지점에서 보여줄 튜토리얼 대사를 적으세요.
+// 4. Tutorial Text에 이 지점에서 보여줄 튜토리얼 대사를 적으세요. 줄을 나누면 페이지가 나뉩니다.
+// 5. (선택) 다음 튜토리얼과 이어서 재생하고 싶다면 Next Tutorial에 그 트리거를 연결하세요.
+// 6. (선택) 이 튜토리얼이 끝나는 순간 Main 씬의 인트로 페이드를 풀고 싶다면
+//    Releases Intro Fade를 체크하세요 (GameManager의 Intro Fade 필드도 연결되어 있어야 합니다).
+// 7. (선택) 이 튜토리얼이 끝나는 순간 해금하고 싶은 능력이 있다면 Unlocks Walk / Unlocks Jump /
+//    Unlocks World Switch 중 원하는 걸 체크하세요. 여러 개를 동시에 체크해도 됩니다.
+// 8. Typing Speed(타이핑 속도), Fade Duration(체인 페이드 인/아웃 시간), Next Tutorial Pause Duration
+//    (다음 튜토리얼이 뜨기 전 텀)은 전부 이 트리거마다 따로 설정합니다 (GameManager 전역 설정 아님).
 [RequireComponent(typeof(Collider2D))]
 public class TutorialTrigger : MonoBehaviour
 {
@@ -17,12 +47,36 @@ public class TutorialTrigger : MonoBehaviour
     [Header("어느 슬롯에 띄울지")]
     public TargetSlot targetSlot = TargetSlot.Player;
 
-    [Header("표시할 튜토리얼 대사")]
+    [Header("표시할 튜토리얼 대사 (Enter로 줄바꿈 = 페이지 구분)")]
     [TextArea(2, 4)]
     public string tutorialText;
 
     [Header("연동")]
-    public GameManager gameManager; // 실제 슬롯 표시 처리는 GameManager가 담당
+    public GameManager gameManager; // 실제 진행 처리는 GameManager가 담당
+
+    [Header("다음 튜토리얼과 연결 (선택)")]
+    // 지정하면, 이 튜토리얼이 끝난 직후 플레이어 이동 없이 곧바로 다음 튜토리얼이 이어서 재생됩니다.
+    public TutorialTrigger nextTutorial;
+
+    [Header("이 튜토리얼의 연출 설정")]
+    // 이 튜토리얼의 텍스트가 타이핑되는 속도(초당 글자 수). 0 이하면 즉시 전체 표시됨
+    public float typingSpeed = 25f;
+    // 이 튜토리얼이 체인으로 이어받아 나타날 때(페이드 인)와, 체인으로 다음으로 넘어가며
+    // 사라질 때(페이드 아웃) 걸리는 시간. 체인이 아닌 단독 시작/종료에는 영향 없음(즉시 표시 유지).
+    public float fadeDuration = 0.4f;
+    // Next Tutorial이 지정된 경우, 이 튜토리얼이 페이드 아웃으로 완전히 사라진 뒤
+    // 다음 튜토리얼이 나타나기 전까지 대기할 텀(초). Next Tutorial이 없으면 사용되지 않음
+    public float nextTutorialPauseDuration = 1f;
+
+    [Header("Main 씬 인트로 페이드 해제 (선택)")]
+    // 체크하면, 이 튜토리얼이 끝나는 순간 GameManager.introFade의 검은 화면이 풀립니다.
+    public bool releasesIntroFade = false;
+
+    [Header("능력 해금 (선택)")]
+    // [추가] 체크한 항목이 이 튜토리얼 종료 시점에 플레이어에게 영구적으로 해금됩니다.
+    public bool unlocksWalk = false;
+    public bool unlocksJump = false;
+    public bool unlocksWorldSwitch = false; // C키로 꿈/현실 전환하는 기능
 
     [Header("플레이어 인식용 태그")]
     public string playerTag = "Player";
@@ -38,8 +92,31 @@ public class TutorialTrigger : MonoBehaviour
         if (!other.CompareTag(playerTag)) return;
         if (gameManager == null) return;
 
-        gameManager.ShowTutorialDialogue(targetSlot, tutorialText);
+        // 실제 진행 가능 여부(다른 튜토리얼 진행 중인지 등) 판단과 파괴 시점은 GameManager가 책임짐
+        gameManager.StartTutorial(this);
+    }
 
-        Destroy(gameObject); // [요청] 한 번 진행된 튜토리얼 객체는 즉시 삭제
+    /// <summary>
+    /// tutorialText를 줄바꿈(Enter) 기준으로 나눈 "페이지" 배열을 반환합니다.
+    /// 인스펙터 TextArea에서 입력한 개행은 문자열에 실제 '\n'(또는 Windows의 '\r\n')으로
+    /// 그대로 저장되므로 이 분리가 그대로 적용됩니다. 빈 줄은 페이지로 취급하지 않고 제외합니다.
+    /// </summary>
+    public string[] GetPages()
+    {
+        if (string.IsNullOrEmpty(tutorialText)) return new string[0];
+
+        string[] rawLines = tutorialText.Split('\n');
+        List<string> pages = new List<string>();
+
+        foreach (string line in rawLines)
+        {
+            string trimmed = line.TrimEnd('\r'); // Windows 줄바꿈(\r\n) 대비
+            if (!string.IsNullOrWhiteSpace(trimmed))
+            {
+                pages.Add(trimmed);
+            }
+        }
+
+        return pages.ToArray();
     }
 }

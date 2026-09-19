@@ -4,6 +4,7 @@ using UnityEngine.SceneManagement; // [추가] 씬 전환을 위해 필요
 public class LobbyManager : MonoBehaviour
 {
     public GameObject PlayButton;
+    public GameObject MainButton;
 
     void Start()
     {
@@ -19,5 +20,10 @@ public class LobbyManager : MonoBehaviour
     public void OnPlayButtonClicked()
     {
         SceneManager.LoadScene("Ep.1 Story");
+    }
+
+    public void onMainButtononClicked()
+    {
+        SceneManager.LoadScene("Main");
     }
 }
