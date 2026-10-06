@@ -28,6 +28,15 @@ using UnityEngine;
 // 어떤 튜토리얼이 재생 중일 때 다른 튜토리얼 트리거에 플레이어가 닿아도 무시됩니다.
 // 이때 해당 트리거는 파괴되지 않으므로, 플레이어가 나갔다가 다시 들어오면 그때 다시 시도됩니다.
 //
+// [Tutorial Text를 비워두는 경우]
+// Tutorial Text를 비워두면 대사도, 대화 슬롯도 전혀 표시되지 않고 조용히 다음 단계(능력 해금,
+// 인트로 페이드 해제, 선택지, Next Tutorial)로 넘어갑니다. 텍스트 없이 다른 효과만 내고 싶은
+// 트리거(예: 능력만 해금하는 더미 트리거)를 만들 때 사용하세요.
+//
+// [화면 진동]
+// Shake Screen을 체크하면, 이 트리거의 대사가 나타나는 순간 화면이 흔들립니다
+// (Tutorial Text가 비어있으면 애초에 대사가 안 나타나므로 진동도 발생하지 않습니다).
+//
 // [추가] 능력 해금
 // 이 튜토리얼의 대사가 전부 끝나는 순간, 체크해둔 능력이 플레이어에게 영구적으로 해금됩니다
 // (PlayerMovement.canWalk/canJump, GameManager.canSwitchWorld). 기본 상태에서 플레이어는
@@ -100,6 +109,13 @@ public class TutorialTrigger : MonoBehaviour
     public bool unlocksWalk = false;
     public bool unlocksJump = false;
     public bool unlocksWorldSwitch = false; // C키로 꿈/현실 전환하는 기능
+
+    [Header("화면 진동 (선택)")]
+    // [추가] 체크하면 이 튜토리얼의 대사가 시작되는 순간 화면이 크게 흔들립니다
+    // (CameraAndBackgroundController.PlayRippleEffect 재사용, GameManager의 Camera Controller 필요).
+    public bool shakeScreen = false;
+    public float shakeDuration = 0.5f;   // 흔들림 지속 시간(초)
+    public float shakeMagnitude = 0.5f;  // 흔들림 강도 (ExitDoor 기본값 0.15보다 훨씬 큰 "큰 흔들림" 기본값)
 
     [Header("플레이어 인식용 태그")]
     public string playerTag = "Player";

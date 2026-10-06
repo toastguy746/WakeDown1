@@ -26,7 +26,7 @@ public class GameManager : MonoBehaviour
     public float transitionDuration = 2f;
 
     [Header("월드 전환 입력 설정")]
-    // 기본적으로 잠겨있다가, Unlocks World Switch가 체크된 TutorialTrigger가 끝나면 true로 바뀜.
+    // [추가] 기본적으로 잠겨있다가, Unlocks World Switch가 체크된 TutorialTrigger가 끝나면 true로 바뀜.
     // false인 동안은 C키를 눌러도 아무 일도 일어나지 않습니다.
     public bool canSwitchWorld = false;
     public KeyCode switchWorldKey = KeyCode.C;
@@ -61,7 +61,9 @@ public class GameManager : MonoBehaviour
     // 각 TutorialTrigger가 자기 자신의 값(typingSpeed, fadeDuration, nextTutorialPauseDuration)으로 갖고 있습니다.
 
     private bool isTutorialInProgress = false; // 다른 튜토리얼이 재생 중인지 잠금 플래그
-    private TutorialTrigger pendingChoiceResult; // RunChoiceSelection이 고른 결과를 담아두는 임시 필드
+    private bool tutorialDisplayedContent = false; // [추가] 방금 트리거가 실제로 텍스트를 보여줬는지 (비어있으면 false)
+    private TutorialTrigger pendingChoiceResult; // [추가] RunChoiceSelection이 고른 결과를 담아두는 임시 필드
+    private DialogueSlot pendingChoiceSlot; // [추가] 선택지 목록을 표시했던 슬롯 (선택 후 치워주기 위해 기억해둠)
 
     private bool isSwitching = false;
     private Transform playerTransform;
@@ -102,7 +104,7 @@ public class GameManager : MonoBehaviour
         }
 
         // 세계 전환 키 입력 → 버튼 클릭 시뮬레이션으로 통일
-        // (canSwitchWorld가 해금되지 않았거나, 대화창(튜토리얼)이 떠있는 동안에는 무시)
+        // ([변경] canSwitchWorld가 해금되지 않았거나, 대화창(튜토리얼)이 떠있는 동안에는 무시)
         if (canSwitchWorld && Input.GetKeyDown(switchWorldKey) && !isSwitching && !isTutorialInProgress)
         {
             SimulateWorldStateButtonPress();
@@ -275,7 +277,7 @@ public class GameManager : MonoBehaviour
 
             yield return StartCoroutine(RunSingleTutorial(current, slot, fadeInThisOne));
 
-            // 이 트리거가 끝나는 시점에 체크된 능력을 해금
+            // [추가] 이 트리거가 끝나는 시점에 체크된 능력을 해금
             ApplyUnlocksFor(current);
 
             if (current.releasesIntroFade)
@@ -291,29 +293,46 @@ public class GameManager : MonoBehaviour
                 }
             }
 
-            // Choices가 있으면 Next Tutorial 대신 플레이어가 고른 선택지의 target으로 이어짐
+            // [추가] Choices가 있으면 Next Tutorial 대신 플레이어가 고른 선택지의 target으로 이어짐
             TutorialTrigger next;
 
             if (current.choices != null && current.choices.Length > 0)
             {
-                // 선택지 슬롯(보통 Player)을 띄우기 전에, 현재 질문이 떠있던 슬롯(보통 Spirit)부터
-                // 먼저 정리해야 두 텍스트가 겹쳐 보이지 않음
-                if (slot != null)
+                // [수정] 선택지 슬롯(보통 Player)을 띄우기 전에, 현재 질문이 떠있던 슬롯(보통 Spirit)부터
+                // 먼저 정리해야 두 텍스트가 겹쳐 보이지 않음. 단, 애초에 대사를 표시한 적이 없다면
+                // (tutorialDisplayedContent == false) 숨길 것도 없으므로 이 단계를 건너뜀
+                if (slot != null && tutorialDisplayedContent)
                 {
                     Debug.Log($"[Tutorial] '{current.name}' 선택지 진입 전 기존 슬롯 정리 ({current.fadeDuration}초 페이드아웃 + {current.nextTutorialPauseDuration}초 텀)");
                     yield return StartCoroutine(slot.HideRoutine(current.fadeDuration));
                     yield return new WaitForSeconds(current.nextTutorialPauseDuration);
                 }
 
-                // RunChoiceSelection이 선택지 슬롯을 열고, 선택 확정과 동시에 그 슬롯도 알아서 닫아줌
                 yield return StartCoroutine(RunChoiceSelection(current));
                 next = pendingChoiceResult;
+
+                // [추가] 선택지 목록을 치워줌. next가 있으면 그쪽의 ShowRoutine이 알아서 덮어쓰긴 하지만,
+                // next가 없는 경우(선택지에서 바로 종료) 여기서 지워주지 않으면 화면에 영원히 남아있었음
+                if (pendingChoiceSlot != null)
+                {
+                    if (next != null)
+                    {
+                        yield return StartCoroutine(pendingChoiceSlot.HideRoutine(current.fadeDuration));
+                        yield return new WaitForSeconds(current.nextTutorialPauseDuration);
+                    }
+                    else
+                    {
+                        pendingChoiceSlot.Hide();
+                    }
+                }
             }
             else
             {
                 next = current.nextTutorial;
 
-                if (slot != null)
+                // [변경] 대사를 표시한 적이 없다면(tutorialDisplayedContent == false) 페이드/텀/Hide 전부
+                // 불필요하므로 전체를 건너뜀 — 텍스트 없는 트리거는 정말로 아무 연출도 없이 조용히 지나감
+                if (slot != null && tutorialDisplayedContent)
                 {
                     if (next != null)
                     {
@@ -340,7 +359,7 @@ public class GameManager : MonoBehaviour
         Debug.Log("[Tutorial] 체인 전체 종료, 잠금 해제됨 (canMove 복구)");
     }
 
-    // trigger에 체크된 능력 해금 플래그를 실제 플레이어/GameManager 상태에 반영
+    // [추가] trigger에 체크된 능력 해금 플래그를 실제 플레이어/GameManager 상태에 반영
     private void ApplyUnlocksFor(TutorialTrigger trigger)
     {
         if (trigger.unlocksWalk && playerScript != null)
@@ -364,6 +383,7 @@ public class GameManager : MonoBehaviour
 
     IEnumerator RunSingleTutorial(TutorialTrigger trigger, DialogueSlot slot, bool fadeIn)
     {
+        tutorialDisplayedContent = false; // [추가] 이번 트리거가 실제로 뭔가 보여줬는지 호출부(RunTutorialChain)에 알려주는 플래그
         string[] pages = trigger.GetPages();
 
         if (slot == null)
@@ -371,10 +391,47 @@ public class GameManager : MonoBehaviour
             Debug.LogWarning($"[Tutorial] '{trigger.name}'의 대상 슬롯이 GameManager에 연결되어 있지 않습니다 (Player/Spirit Dialogue Slot 확인 필요). 대사 표시 없이 건너뜁니다.");
             yield break;
         }
+        // [변경] 대사가 비어있는 건 에러가 아니라 "일부러 텍스트 없이 쓰는" 정상적인 경우일 수 있음
+        // (예: 능력 해금/인트로 페이드 해제/선택지 분기용으로만 쓰이는 트리거). 그래서 경고가 아니라
+        // 평범한 로그로 남기고, 슬롯은 아예 건드리지 않은 채 조용히 넘어감
         if (pages.Length == 0)
         {
-            Debug.LogWarning($"[Tutorial] '{trigger.name}'의 Tutorial Text가 비어 있습니다. 대사 표시 없이 건너뜁니다.");
+            Debug.Log($"[Tutorial] '{trigger.name}'은(는) Tutorial Text가 비어있어 대사 표시 없이 다음으로 넘어갑니다.");
+
+            // [추가] 대사가 없어도 진동만 내는 더미 트리거는 지원해야 하므로, 여기서도 진동 체크는 함.
+            // 이 경우 흔들림을 보여줄 다른 연출(텍스트)이 없으므로, 진동이 다 끝날 때까지 기다렸다가
+            // 다음 단계(능력 해금/체인 등)로 넘어감 — 안 그러면 흔들리기 시작하자마자 바로 다음으로 넘어가버림
+            if (trigger.shakeScreen)
+            {
+                if (cameraController != null)
+                {
+                    Debug.Log($"[Tutorial] '{trigger.name}' 진동 연출 시작 (지속={trigger.shakeDuration}초, 강도={trigger.shakeMagnitude}) — 대사가 없어 진동이 끝날 때까지 대기합니다");
+                    cameraController.PlayRippleEffect(trigger.shakeDuration, trigger.shakeMagnitude);
+                    yield return new WaitForSeconds(trigger.shakeDuration);
+                }
+                else
+                {
+                    Debug.LogWarning($"[Tutorial] '{trigger.name}'는 Shake Screen이 체크되어 있지만, GameManager의 Camera Controller 필드가 비어있어 진동을 재생할 수 없습니다.");
+                }
+            }
+
             yield break;
+        }
+
+        tutorialDisplayedContent = true;
+
+        // [추가] 진동 체크 — 대사가 시작되는 시점에 맞춰 화면을 흔듦
+        if (trigger.shakeScreen)
+        {
+            if (cameraController != null)
+            {
+                Debug.Log($"[Tutorial] '{trigger.name}' 진동 연출 시작 (지속={trigger.shakeDuration}초, 강도={trigger.shakeMagnitude})");
+                cameraController.PlayRippleEffect(trigger.shakeDuration, trigger.shakeMagnitude);
+            }
+            else
+            {
+                Debug.LogWarning($"[Tutorial] '{trigger.name}'는 Shake Screen이 체크되어 있지만, GameManager의 Camera Controller 필드가 비어있어 진동을 재생할 수 없습니다.");
+            }
         }
 
         Debug.Log($"[Tutorial] '{trigger.name}' 시작 — 페이지 {pages.Length}개, 슬롯={slot.name}, 페이드인={fadeIn}");
@@ -413,15 +470,15 @@ public class GameManager : MonoBehaviour
         return trigger.targetSlot == TutorialTrigger.TargetSlot.Player ? playerDialogueSlot : spiritDialogueSlot;
     }
 
-    // trigger.choices를 trigger.choiceSlot에 목록으로 띄우고, 방향키로 커서를 옮기다가
+    // [추가] trigger.choices를 trigger.choiceSlot에 목록으로 띄우고, 방향키로 커서를 옮기다가
     // tutorialAdvanceKey로 확정하면 pendingChoiceResult에 선택된 target을 담아둡니다.
-    // [수정] 이전에는 선택 확정 후 choiceSlotRef(선택지가 떠 있던 슬롯) 자체를 닫는 코드가 없어서,
-    // 다음 트리거가 다른 슬롯(예: 선택지=Player, 다음 대사=Spirit)에서 뜨면 선택지 목록이
-    // 화면에 계속 남아있는 버그가 있었습니다. 이제 선택이 확정되는 즉시 이 슬롯을 명시적으로
-    // 닫습니다 (다음 트리거가 있으면 페이드 아웃 후 텀, 없으면 즉시 닫기 — 기존 체인 전환과 동일한 패턴).
+    // 이 선택지 목록을 띄웠던 슬롯은 pendingChoiceSlot에 기억해두고, 호출부(RunTutorialChain)가
+    // 선택 확정 직후 책임지고 정리합니다 (다음 트리거가 없을 수도 있어서, 다음 트리거의
+    // ShowRoutine에만 기대면 그 경우엔 아무도 안 지워주는 문제가 있었습니다).
     IEnumerator RunChoiceSelection(TutorialTrigger trigger)
     {
         DialogueSlot choiceSlotRef = trigger.choiceSlot == TutorialTrigger.TargetSlot.Player ? playerDialogueSlot : spiritDialogueSlot;
+        pendingChoiceSlot = choiceSlotRef;
 
         if (choiceSlotRef == null)
         {
@@ -460,19 +517,7 @@ public class GameManager : MonoBehaviour
         pendingChoiceResult = chosen.target;
         Debug.Log($"[Tutorial] 선택지 확정: \"{chosen.label}\" → 다음: {(chosen.target != null ? chosen.target.name : "(없음, 종료)")}");
 
-        // [추가] 선택지 목록 슬롯을 다음 대사로 넘어가기 전에 닫음 (안 닫히던 버그 수정 지점)
-        if (chosen.target != null)
-        {
-            Debug.Log($"[Tutorial] 선택지 슬롯 정리 ({trigger.fadeDuration}초 페이드아웃 + {trigger.nextTutorialPauseDuration}초 텀)");
-            yield return StartCoroutine(choiceSlotRef.HideRoutine(trigger.fadeDuration));
-            yield return new WaitForSeconds(trigger.nextTutorialPauseDuration);
-        }
-        else
-        {
-            choiceSlotRef.Hide();
-        }
-
-        // 고르지 않은 나머지 선택지들의 target은 다시 쓰일 일이 없으므로 여기서 정리함
+        // [추가] 고르지 않은 나머지 선택지들의 target은 다시 쓰일 일이 없으므로 여기서 정리함
         // (같은 target을 여러 선택지가 공유하는 합류 구조일 수 있으니, 선택된 target과 같은 건 건너뜀)
         foreach (TutorialTrigger.DialogueChoice choice in trigger.choices)
         {
@@ -485,19 +530,21 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // 선택지 목록을 한 줄씩, 현재 커서가 있는 항목만 "▶ " 표시로 구분해서 슬롯에 즉시 표시
+    // 선택지 목록을 한 줄씩, 현재 커서가 있는 항목만 "> " 표시로 구분해서 슬롯에 즉시 표시
+    // [수정] 유니코드 화살표(▶)는 한글 SDF 폰트 아틀라스에 없는 경우가 많아 네모(□)로 깨지므로,
+    // 어떤 폰트에도 항상 존재하는 일반 ASCII ">" 문자로 대체함
     private void RenderChoices(DialogueSlot slot, TutorialTrigger.DialogueChoice[] choices, int selectedIndex)
     {
         System.Text.StringBuilder sb = new System.Text.StringBuilder();
 
         for (int i = 0; i < choices.Length; i++)
         {
-            sb.Append(i == selectedIndex ? "▶ " : "   ");
+            sb.Append(i == selectedIndex ? "> " : "   ");
             sb.Append(choices[i].label);
             sb.Append('\n'); // 안내 문구를 위해 항상 개행 (마지막 선택지 뒤에도 붙음)
         }
 
-        // 조작법을 몰라서 헤매지 않도록 화면에 직접 안내 문구를 같이 표시
+        // [추가] 조작법을 몰라서 헤매지 않도록 화면에 직접 안내 문구를 같이 표시
         sb.Append($"\n(↑/↓ 이동, {tutorialAdvanceKey}로 선택)");
 
         slot.Show(sb.ToString());

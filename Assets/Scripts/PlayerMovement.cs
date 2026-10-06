@@ -5,6 +5,7 @@ public class PlayerMovement : MonoBehaviour
 {
     [Header("이동 및 점프 세팅")]
     public float moveSpeed = 5f;       // 좌우 이동 속도
+    public float acceleration = 25f;   // [추가] 초당 속도 변화량. 클수록 목표 속도에 빨리 도달(더 딱딱하게), 작을수록 서서히 가속/감속
     public float jumpForce = 8f;       // 점프 힘 (높이)
     public float originalScale = 2f;   // 캐릭터 원래 크기
 
@@ -101,7 +102,12 @@ public class PlayerMovement : MonoBehaviour
     {
         // [변경] canMove가 꺼져있어도 FixedUpdate는 계속 돌아야 점프의 수직 속도가 그대로 유지됩니다.
         // moveInput은 canMove가 꺼져있으면 이미 0으로 고정되어 있으므로, 좌우 이동만 자연스럽게 멈춥니다.
-        rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
+        //
+        // [추가] 목표 속도로 순간 스냅하지 않고, acceleration(초당 속도 변화량)만큼씩 서서히 다가가도록
+        // 변경 — 가속/감속 둘 다 이 한 줄로 자연스럽게 처리됨 (입력이 끊기면 목표 속도가 0이 되어 감속)
+        float targetSpeedX = moveInput * moveSpeed;
+        float newSpeedX = Mathf.MoveTowards(rb.linearVelocity.x, targetSpeedX, acceleration * Time.fixedDeltaTime);
+        rb.linearVelocity = new Vector2(newSpeedX, rb.linearVelocity.y);
     }
 
     private void OnDrawGizmosSelected()
