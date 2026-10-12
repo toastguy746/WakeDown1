@@ -67,6 +67,6 @@
         "*.sln": "*.csproj",
         "*.slnx": "*.csproj"
     },
-    "dotnet.defaultSolution": "WakeDown.slnx",
+    "dotnet.defaultSolution": "WakeDown1.slnx",
     "dotnet.enableWorkspaceBasedDevelopment": false
 }
