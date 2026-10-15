@@ -26,10 +26,17 @@ public class GameManager : MonoBehaviour
     public float transitionDuration = 2f;
 
     [Header("월드 전환 입력 설정")]
-    // [추가] 기본적으로 잠겨있다가, Unlocks World Switch가 체크된 TutorialTrigger가 끝나면 true로 바뀜.
+    // 기본적으로 잠겨있다가, Unlocks World Switch가 체크된 TutorialTrigger가 끝나면 true로 바뀜.
     // false인 동안은 C키를 눌러도 아무 일도 일어나지 않습니다.
     public bool canSwitchWorld = false;
     public KeyCode switchWorldKey = KeyCode.C;
+
+    [Header("보라빛 에너지 제한 (Ep.3 Azocci 전용)")]
+    // 씬 시작 시 자동으로 찾습니다 (인스펙터 연결 불필요). 씬에 PurpleLight가 없으면
+    // null로 남아서 기존처럼 C키로 자유롭게 이동합니다.
+    private PurpleLight purpleLight;
+    public KeyCode confirmKey = KeyCode.Return; // Enter
+    private bool isSwitchPrompting = false;
 
     [Header("꿈/현실 표시 버튼")]
     public Button worldStateButton;
@@ -61,20 +68,38 @@ public class GameManager : MonoBehaviour
     // 각 TutorialTrigger가 자기 자신의 값(typingSpeed, fadeDuration, nextTutorialPauseDuration)으로 갖고 있습니다.
 
     private bool isTutorialInProgress = false; // 다른 튜토리얼이 재생 중인지 잠금 플래그
-    private bool tutorialDisplayedContent = false; // [추가] 방금 트리거가 실제로 텍스트를 보여줬는지 (비어있으면 false)
-    private TutorialTrigger pendingChoiceResult; // [추가] RunChoiceSelection이 고른 결과를 담아두는 임시 필드
-    private DialogueSlot pendingChoiceSlot; // [추가] 선택지 목록을 표시했던 슬롯 (선택 후 치워주기 위해 기억해둠)
+    private bool tutorialDisplayedContent = false; // 방금 트리거가 실제로 텍스트를 보여줬는지 (비어있으면 false)
+    private TutorialTrigger pendingChoiceResult; // RunChoiceSelection이 고른 결과를 담아두는 임시 필드
+    private DialogueSlot pendingChoiceSlot; // 선택지 목록을 표시했던 슬롯 (선택 후 치워주기 위해 기억해둠)
+
+    // [추가] 정령이 연결돼 있고 씬에서 실제로 활성 상태인지. Ep.3처럼 일부러 정령을 꺼둔 씬에서는
+    // false가 되어 정령 관련 처리(고스트 추적/좌표 교환/EnterDream/EnterReality)를 전부 건너뜁니다.
+    private bool SpiritActive => spirit != null && spirit.gameObject.activeInHierarchy;
 
     private bool isSwitching = false;
     private Transform playerTransform;
     private Collider2D playerCollider;
+    private Rigidbody2D playerRb;
 
     void Start()
     {
+        PlayerMovement.InputLocked = false; // 씬 재시작 시 잠금 상태 초기화
+        purpleLight = FindAnyObjectByType<PurpleLight>(FindObjectsInactive.Include);
+
+        // 인스펙터에 슬롯이 연결 안 돼 있으면 씬에서 자동으로 찾음
+        if (playerDialogueSlot == null)
+        {
+            playerDialogueSlot = FindAnyObjectByType<DialogueSlot>(FindObjectsInactive.Include);
+            Debug.LogWarning(playerDialogueSlot != null
+                ? $"[GameManager] Player Dialogue Slot이 비어 있어서 '{playerDialogueSlot.name}'을(를) 자동으로 사용합니다."
+                : "[GameManager] 씬에 DialogueSlot이 하나도 없습니다! 대화창 UI에 DialogueSlot을 붙이세요.");
+        }
+
         if (playerScript != null)
         {
             playerTransform = playerScript.transform;
             playerCollider = playerScript.GetComponent<Collider2D>();
+            playerRb = playerScript.GetComponent<Rigidbody2D>();
             playerScript.isInDream = isDream;
         }
 
@@ -96,19 +121,143 @@ public class GameManager : MonoBehaviour
         }
 
         // 정령 고스트: 정령의 X를 그대로 따라가되, Y만 세계 간격만큼 차이
-        if (!isSwitching && spirit != null && petGhostTransform != null)
+        if (!isSwitching && SpiritActive && petGhostTransform != null)
         {
             Vector3 spiritPos = spirit.transform.position;
             float petGhostY = isDream ? spiritPos.y + worldYInterval : spiritPos.y - worldYInterval;
             petGhostTransform.position = new Vector3(spiritPos.x, petGhostY, spiritPos.z);
         }
 
-        // 세계 전환 키 입력 → 버튼 클릭 시뮬레이션으로 통일
-        // ([변경] canSwitchWorld가 해금되지 않았거나, 대화창(튜토리얼)이 떠있는 동안에는 무시)
-        if (canSwitchWorld && Input.GetKeyDown(switchWorldKey) && !isSwitching && !isTutorialInProgress)
+        // [진단] C키를 눌렀을 때 어떤 조건에서 막히는지 확인용 로그
+        if (Input.GetKeyDown(switchWorldKey))
         {
-            SimulateWorldStateButtonPress();
+            Debug.Log($"[C키] canSwitchWorld={canSwitchWorld}, switching={isSwitching}, tutorial={isTutorialInProgress}, prompting={isSwitchPrompting}, inputLocked={PlayerMovement.InputLocked}, purpleLight={(purpleLight != null)}, hasCharge={(purpleLight != null && purpleLight.HasCharge)}, slot={(playerDialogueSlot != null)}");
         }
+
+        // 세계 전환 키 입력
+        // canSwitchWorld가 해금되지 않았거나, 대화창(튜토리얼/이동 확인창)이 떠있는 동안에는 무시
+        // purpleLight가 연결된 씬(Ep.3 Azocci)에서는 에너지 이동권/예·아니오 확인 흐름을 거침
+        if (canSwitchWorld && Input.GetKeyDown(switchWorldKey) && !isSwitching && !isTutorialInProgress && !isSwitchPrompting)
+        {
+            if (purpleLight == null) SimulateWorldStateButtonPress();
+            else StartCoroutine(HandleSwitchKeyWithPurpleLight());
+        }
+    }
+
+    // ================================================================
+    // 보라빛 에너지 C키 처리 (Ep.3 Azocci 전용)
+    // ================================================================
+
+    IEnumerator HandleSwitchKeyWithPurpleLight()
+    {
+        isSwitchPrompting = true;
+        PlayerMovement.InputLocked = true; // [통일] 이동 잠금은 InputLocked 하나만 사용
+        StopPlayerHorizontalVelocity();
+
+        DialogueSlot slot = playerDialogueSlot;
+        bool canSwitch = CanSwitchNow();
+        bool confirmedYes = false;
+
+        if (slot == null)
+        {
+            Debug.LogWarning("[PurpleLight] Player Dialogue Slot이 연결되지 않아 대사 없이 처리합니다.");
+            confirmedYes = canSwitch;
+        }
+        else if (!canSwitch)
+        {
+            // 이동 불가: 안내 문구 표시 후 확정키를 누르거나 2초가 지나면 자동으로 닫힘
+            slot.Show(purpleLight.blockedMessage);
+            yield return null;
+
+            float t = 0f;
+            while (t < 2f && !IsConfirmPressed())
+            {
+                StopPlayerHorizontalVelocity();
+                t += Time.deltaTime;
+                yield return null;
+            }
+        }
+        else
+        {
+            // 이동 가능: 예/아니오를 가로로 나란히 표시 (좌우 방향키 또는 A/D로 이동, Enter/Space로 확정)
+            string ask = isDream ? purpleLight.askToRealityMessage : purpleLight.askToDreamMessage;
+            int selected = 0; // 0 = 예, 1 = 아니오
+            RenderYesNo(slot, ask, selected);
+            yield return null; // C키 입력이 그대로 확정에 쓰이는 것 방지
+
+            while (true)
+            {
+                StopPlayerHorizontalVelocity();
+
+                if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A) ||
+                    Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
+                {
+                    selected = 1 - selected;
+                    RenderYesNo(slot, ask, selected);
+                }
+                else if (IsConfirmPressed())
+                {
+                    break;
+                }
+                yield return null;
+            }
+            confirmedYes = (selected == 0);
+        }
+
+        if (slot != null) slot.Hide();
+
+        if (confirmedYes)
+        {
+            // 전환이 시작되면 잠금 해제 책임은 SwitchWorldSequence(finally)가 가져감.
+            // 여기서 먼저 풀어버리면 전환 연출 도중에 움직일 수 있으므로, 시퀀스가 시작될 때까지만 기다림.
+            SimulateWorldStateButtonPress();
+
+            float waited = 0f;
+            while (!isSwitching && waited < 1f)
+            {
+                waited += Time.deltaTime;
+                yield return null;
+            }
+
+            // 혹시 전환이 시작되지 못했다면(안전장치) 잠금이 남지 않도록 직접 해제
+            if (!isSwitching) PlayerMovement.InputLocked = false;
+        }
+        else
+        {
+            PlayerMovement.InputLocked = false;
+        }
+
+        isSwitchPrompting = false;
+    }
+
+    // 대화창이 떠있는 동안 남아있는 가로 속도만 제거 (이동 차단 자체는 InputLocked가 담당)
+    void StopPlayerHorizontalVelocity()
+    {
+        if (playerRb != null)
+            playerRb.linearVelocity = new Vector2(0f, playerRb.linearVelocity.y);
+    }
+
+    bool IsConfirmPressed()
+    {
+        return Input.GetKeyDown(confirmKey) ||
+               Input.GetKeyDown(KeyCode.KeypadEnter) ||
+               Input.GetKeyDown(tutorialAdvanceKey);
+    }
+
+    void RenderYesNo(DialogueSlot slot, string question, int selected)
+    {
+        string yes = selected == 0 ? $"> {purpleLight.yesLabel}" : $"   {purpleLight.yesLabel}";
+        string no  = selected == 1 ? $"> {purpleLight.noLabel}"  : $"   {purpleLight.noLabel}";
+
+        // 질문 아래 한 줄에 예 / 아니오를 가로로 배치
+        slot.Show($"{question}\n{yes}        {no}");
+    }
+
+    // 현실→꿈은 이동권이 있어야 가능, 꿈→현실은 항상 가능
+    bool CanSwitchNow()
+    {
+        if (purpleLight == null) return true;
+        return isDream || purpleLight.HasCharge;
     }
 
     // ================================================================
@@ -133,6 +282,14 @@ public class GameManager : MonoBehaviour
         yield return new WaitForSeconds(0.1f);
         ExecuteEvents.Execute(worldStateButton.gameObject, pointerData, ExecuteEvents.pointerUpHandler);
         ExecuteEvents.Execute(worldStateButton.gameObject, pointerData, ExecuteEvents.pointerClickHandler);
+
+        // [추가] pointerDown 때문에 버튼이 EventSystem의 "선택된 오브젝트"로 남으면,
+        // 이후 WASD/방향키가 UI 네비게이션으로, Space/Enter가 버튼 Submit으로 처리될 수 있음.
+        // 클릭 직후 선택을 해제해서 게임 입력과 UI 입력이 섞이지 않게 함.
+        if (EventSystem.current != null)
+        {
+            EventSystem.current.SetSelectedGameObject(null);
+        }
     }
 
     // ================================================================
@@ -142,25 +299,31 @@ public class GameManager : MonoBehaviour
     IEnumerator SwitchWorldSequence()
     {
         isSwitching = true;
-        if (playerScript != null) playerScript.canMove = false;
+        PlayerMovement.InputLocked = true; // [통일] canMove 대신 InputLocked 사용
 
-        if (transitionUI != null)
+        // [안전장치] 도중에 예외가 나거나 코루틴이 중단돼도 잠금이 영원히 남지 않도록 finally에서 해제
+        try
         {
-            yield return StartCoroutine(transitionUI.PlayTransition(isDream, transitionDuration, SwapWorldsAtMidpoint));
-        }
-        else
-        {
-            SwapWorldsAtMidpoint();
-        }
+            if (transitionUI != null)
+            {
+                yield return StartCoroutine(transitionUI.PlayTransition(isDream, transitionDuration, SwapWorldsAtMidpoint));
+            }
+            else
+            {
+                SwapWorldsAtMidpoint();
+            }
 
-        // 꿈 → 현실로 돌아온 경우에만 여기(화면이 완전히 밝아진 뒤)에서 정령을 복귀시킴.
-        if (!isDream && spirit != null)
-        {
-            spirit.EnterReality();
+            // 꿈 → 현실로 돌아온 경우에만 여기(화면이 완전히 밝아진 뒤)에서 정령을 복귀시킴.
+            if (!isDream && SpiritActive)
+            {
+                spirit.EnterReality();
+            }
         }
-
-        if (playerScript != null) playerScript.canMove = true;
-        isSwitching = false;
+        finally
+        {
+            PlayerMovement.InputLocked = false;
+            isSwitching = false;
+        }
     }
 
     // 화면이 완전히 어두워진 순간 실행: 좌표 교환 + 세계 상태 토글 + 카메라/버튼 갱신
@@ -174,7 +337,7 @@ public class GameManager : MonoBehaviour
             ghostTransform.position = playerCurrentPos;
         }
 
-        if (spirit != null && petGhostTransform != null)
+        if (SpiritActive && petGhostTransform != null)
         {
             Vector3 spiritCurrentPos = spirit.transform.position;
             Vector3 petGhostCurrentPos = petGhostTransform.position;
@@ -183,6 +346,13 @@ public class GameManager : MonoBehaviour
         }
 
         isDream = !isDream;
+
+        // 현실 → 꿈으로 넘어온 순간: 1회용 이동권 소모 + 에너지를 같은 자리에 다시 활성화
+        if (purpleLight != null && isDream)
+        {
+            purpleLight.ConsumeCharge();
+            purpleLight.RespawnEnergy();
+        }
 
         if (playerScript != null) playerScript.isInDream = isDream;
 
@@ -195,7 +365,7 @@ public class GameManager : MonoBehaviour
         UpdateWorldStateButtonColor();
         UpdateLightsForCurrentWorld();
 
-        if (spirit != null && isDream)
+        if (SpiritActive && isDream)
         {
             spirit.EnterDream();
         }
@@ -236,7 +406,7 @@ public class GameManager : MonoBehaviour
 
     void ResetPetGhostInitialPosition()
     {
-        if (petGhostTransform == null || spirit == null) return;
+        if (petGhostTransform == null || !SpiritActive) return;
         Vector3 spiritPos = spirit.transform.position;
         float targetY = isDream ? spiritPos.y + worldYInterval : spiritPos.y - worldYInterval;
         petGhostTransform.position = new Vector3(spiritPos.x, targetY, spiritPos.z);
@@ -244,7 +414,9 @@ public class GameManager : MonoBehaviour
 
     public void OnWorldStateButtonClicked()
     {
-        if (!isSwitching) StartCoroutine(SwitchWorldSequence());
+        if (isSwitching) return;
+        if (!CanSwitchNow()) return; // 이동권이 없으면 마우스로 버튼을 눌러도 우회 불가
+        StartCoroutine(SwitchWorldSequence());
     }
 
     // ================================================================
@@ -253,18 +425,19 @@ public class GameManager : MonoBehaviour
 
     /// <summary>
     /// TutorialTrigger가 플레이어와 충돌했을 때 호출합니다. 이미 다른 튜토리얼이 진행 중이거나
-    /// C키로 세계 전환(꿈/현실) 중일 때는 아무 일도 하지 않고 무시합니다.
+    /// 세계 전환(꿈/현실) 중, 또는 이동 확인창이 떠있을 때는 아무 일도 하지 않고 무시합니다.
     /// </summary>
     public void StartTutorial(TutorialTrigger trigger)
     {
-        if (isTutorialInProgress || isSwitching || trigger == null) return;
+        if (isTutorialInProgress || isSwitching || isSwitchPrompting || trigger == null) return;
         StartCoroutine(RunTutorialChain(trigger));
     }
 
     IEnumerator RunTutorialChain(TutorialTrigger firstTrigger)
     {
         isTutorialInProgress = true;
-        if (playerScript != null) playerScript.canMove = false;
+        PlayerMovement.InputLocked = true; // [통일] canMove 대신 InputLocked 사용
+        StopPlayerHorizontalVelocity();
 
         Debug.Log($"[Tutorial] 체인 시작: '{firstTrigger.name}'");
 
@@ -277,7 +450,7 @@ public class GameManager : MonoBehaviour
 
             yield return StartCoroutine(RunSingleTutorial(current, slot, fadeInThisOne));
 
-            // [추가] 이 트리거가 끝나는 시점에 체크된 능력을 해금
+            // 이 트리거가 끝나는 시점에 체크된 능력을 해금
             ApplyUnlocksFor(current);
 
             if (current.releasesIntroFade)
@@ -293,12 +466,12 @@ public class GameManager : MonoBehaviour
                 }
             }
 
-            // [추가] Choices가 있으면 Next Tutorial 대신 플레이어가 고른 선택지의 target으로 이어짐
+            // Choices가 있으면 Next Tutorial 대신 플레이어가 고른 선택지의 target으로 이어짐
             TutorialTrigger next;
 
             if (current.choices != null && current.choices.Length > 0)
             {
-                // [수정] 선택지 슬롯(보통 Player)을 띄우기 전에, 현재 질문이 떠있던 슬롯(보통 Spirit)부터
+                // 선택지 슬롯(보통 Player)을 띄우기 전에, 현재 질문이 떠있던 슬롯(보통 Spirit)부터
                 // 먼저 정리해야 두 텍스트가 겹쳐 보이지 않음. 단, 애초에 대사를 표시한 적이 없다면
                 // (tutorialDisplayedContent == false) 숨길 것도 없으므로 이 단계를 건너뜀
                 if (slot != null && tutorialDisplayedContent)
@@ -311,7 +484,7 @@ public class GameManager : MonoBehaviour
                 yield return StartCoroutine(RunChoiceSelection(current));
                 next = pendingChoiceResult;
 
-                // [추가] 선택지 목록을 치워줌. next가 있으면 그쪽의 ShowRoutine이 알아서 덮어쓰긴 하지만,
+                // 선택지 목록을 치워줌. next가 있으면 그쪽의 ShowRoutine이 알아서 덮어쓰긴 하지만,
                 // next가 없는 경우(선택지에서 바로 종료) 여기서 지워주지 않으면 화면에 영원히 남아있었음
                 if (pendingChoiceSlot != null)
                 {
@@ -330,7 +503,7 @@ public class GameManager : MonoBehaviour
             {
                 next = current.nextTutorial;
 
-                // [변경] 대사를 표시한 적이 없다면(tutorialDisplayedContent == false) 페이드/텀/Hide 전부
+                // 대사를 표시한 적이 없다면(tutorialDisplayedContent == false) 페이드/텀/Hide 전부
                 // 불필요하므로 전체를 건너뜀 — 텍스트 없는 트리거는 정말로 아무 연출도 없이 조용히 지나감
                 if (slot != null && tutorialDisplayedContent)
                 {
@@ -354,12 +527,12 @@ public class GameManager : MonoBehaviour
             if (current != null) Debug.Log($"[Tutorial] 체인 연결됨 → 다음: '{current.name}'");
         }
 
-        if (playerScript != null) playerScript.canMove = true;
+        PlayerMovement.InputLocked = false;
         isTutorialInProgress = false;
-        Debug.Log("[Tutorial] 체인 전체 종료, 잠금 해제됨 (canMove 복구)");
+        Debug.Log("[Tutorial] 체인 전체 종료, 잠금 해제됨 (InputLocked 해제)");
     }
 
-    // [추가] trigger에 체크된 능력 해금 플래그를 실제 플레이어/GameManager 상태에 반영
+    // trigger에 체크된 능력 해금 플래그를 실제 플레이어/GameManager 상태에 반영
     private void ApplyUnlocksFor(TutorialTrigger trigger)
     {
         if (trigger.unlocksWalk && playerScript != null)
@@ -383,7 +556,7 @@ public class GameManager : MonoBehaviour
 
     IEnumerator RunSingleTutorial(TutorialTrigger trigger, DialogueSlot slot, bool fadeIn)
     {
-        tutorialDisplayedContent = false; // [추가] 이번 트리거가 실제로 뭔가 보여줬는지 호출부(RunTutorialChain)에 알려주는 플래그
+        tutorialDisplayedContent = false; // 이번 트리거가 실제로 뭔가 보여줬는지 호출부(RunTutorialChain)에 알려주는 플래그
         string[] pages = trigger.GetPages();
 
         if (slot == null)
@@ -391,16 +564,14 @@ public class GameManager : MonoBehaviour
             Debug.LogWarning($"[Tutorial] '{trigger.name}'의 대상 슬롯이 GameManager에 연결되어 있지 않습니다 (Player/Spirit Dialogue Slot 확인 필요). 대사 표시 없이 건너뜁니다.");
             yield break;
         }
-        // [변경] 대사가 비어있는 건 에러가 아니라 "일부러 텍스트 없이 쓰는" 정상적인 경우일 수 있음
-        // (예: 능력 해금/인트로 페이드 해제/선택지 분기용으로만 쓰이는 트리거). 그래서 경고가 아니라
-        // 평범한 로그로 남기고, 슬롯은 아예 건드리지 않은 채 조용히 넘어감
+        // 대사가 비어있는 건 에러가 아니라 "일부러 텍스트 없이 쓰는" 정상적인 경우일 수 있음
+        // (예: 능력 해금/인트로 페이드 해제/선택지 분기용으로만 쓰이는 트리거).
         if (pages.Length == 0)
         {
             Debug.Log($"[Tutorial] '{trigger.name}'은(는) Tutorial Text가 비어있어 대사 표시 없이 다음으로 넘어갑니다.");
 
-            // [추가] 대사가 없어도 진동만 내는 더미 트리거는 지원해야 하므로, 여기서도 진동 체크는 함.
-            // 이 경우 흔들림을 보여줄 다른 연출(텍스트)이 없으므로, 진동이 다 끝날 때까지 기다렸다가
-            // 다음 단계(능력 해금/체인 등)로 넘어감 — 안 그러면 흔들리기 시작하자마자 바로 다음으로 넘어가버림
+            // 대사가 없어도 진동만 내는 더미 트리거는 지원해야 하므로, 여기서도 진동 체크는 함.
+            // 진동이 다 끝날 때까지 기다렸다가 다음 단계(능력 해금/체인 등)로 넘어감
             if (trigger.shakeScreen)
             {
                 if (cameraController != null)
@@ -420,7 +591,7 @@ public class GameManager : MonoBehaviour
 
         tutorialDisplayedContent = true;
 
-        // [추가] 진동 체크 — 대사가 시작되는 시점에 맞춰 화면을 흔듦
+        // 진동 체크 — 대사가 시작되는 시점에 맞춰 화면을 흔듦
         if (trigger.shakeScreen)
         {
             if (cameraController != null)
@@ -470,11 +641,8 @@ public class GameManager : MonoBehaviour
         return trigger.targetSlot == TutorialTrigger.TargetSlot.Player ? playerDialogueSlot : spiritDialogueSlot;
     }
 
-    // [추가] trigger.choices를 trigger.choiceSlot에 목록으로 띄우고, 방향키로 커서를 옮기다가
+    // trigger.choices를 trigger.choiceSlot에 목록으로 띄우고, 방향키로 커서를 옮기다가
     // tutorialAdvanceKey로 확정하면 pendingChoiceResult에 선택된 target을 담아둡니다.
-    // 이 선택지 목록을 띄웠던 슬롯은 pendingChoiceSlot에 기억해두고, 호출부(RunTutorialChain)가
-    // 선택 확정 직후 책임지고 정리합니다 (다음 트리거가 없을 수도 있어서, 다음 트리거의
-    // ShowRoutine에만 기대면 그 경우엔 아무도 안 지워주는 문제가 있었습니다).
     IEnumerator RunChoiceSelection(TutorialTrigger trigger)
     {
         DialogueSlot choiceSlotRef = trigger.choiceSlot == TutorialTrigger.TargetSlot.Player ? playerDialogueSlot : spiritDialogueSlot;
@@ -517,7 +685,7 @@ public class GameManager : MonoBehaviour
         pendingChoiceResult = chosen.target;
         Debug.Log($"[Tutorial] 선택지 확정: \"{chosen.label}\" → 다음: {(chosen.target != null ? chosen.target.name : "(없음, 종료)")}");
 
-        // [추가] 고르지 않은 나머지 선택지들의 target은 다시 쓰일 일이 없으므로 여기서 정리함
+        // 고르지 않은 나머지 선택지들의 target은 다시 쓰일 일이 없으므로 여기서 정리함
         // (같은 target을 여러 선택지가 공유하는 합류 구조일 수 있으니, 선택된 target과 같은 건 건너뜀)
         foreach (TutorialTrigger.DialogueChoice choice in trigger.choices)
         {
@@ -531,8 +699,7 @@ public class GameManager : MonoBehaviour
     }
 
     // 선택지 목록을 한 줄씩, 현재 커서가 있는 항목만 "> " 표시로 구분해서 슬롯에 즉시 표시
-    // [수정] 유니코드 화살표(▶)는 한글 SDF 폰트 아틀라스에 없는 경우가 많아 네모(□)로 깨지므로,
-    // 어떤 폰트에도 항상 존재하는 일반 ASCII ">" 문자로 대체함
+    // (유니코드 화살표는 한글 SDF 폰트 아틀라스에 없는 경우가 많아 일반 ASCII ">" 사용)
     private void RenderChoices(DialogueSlot slot, TutorialTrigger.DialogueChoice[] choices, int selectedIndex)
     {
         System.Text.StringBuilder sb = new System.Text.StringBuilder();
@@ -541,10 +708,10 @@ public class GameManager : MonoBehaviour
         {
             sb.Append(i == selectedIndex ? "> " : "   ");
             sb.Append(choices[i].label);
-            sb.Append('\n'); // 안내 문구를 위해 항상 개행 (마지막 선택지 뒤에도 붙음)
+            sb.Append('\n');
         }
 
-        // [추가] 조작법을 몰라서 헤매지 않도록 화면에 직접 안내 문구를 같이 표시
+        // 조작법을 몰라서 헤매지 않도록 화면에 직접 안내 문구를 같이 표시
         sb.Append($"\n(↑/↓ 이동, {tutorialAdvanceKey}로 선택)");
 
         slot.Show(sb.ToString());

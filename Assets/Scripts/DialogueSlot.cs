@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using TMPro;
@@ -25,6 +26,28 @@ public class DialogueSlot : MonoBehaviour
     private string currentText = null; // 현재 이 슬롯에 떠있는 텍스트 (없으면 null)
     private Coroutine fadeCoroutine;   // 진행 중인 페이드/타이핑 코루틴 참조 (중복 호출 시 정리용)
     private bool skipTypingRequested = false; // [추가] 타이핑 도중 전체 텍스트를 즉시 표시해달라는 요청 플래그
+
+    // [추가] 씬에 있는 모든 DialogueSlot 목록. 어느 슬롯이든 대사가 떠있는지 PlayerMovement가 확인하는 용도
+    private static readonly List<DialogueSlot> allSlots = new List<DialogueSlot>();
+
+    /// <summary>이 슬롯에 대사가 떠있는지 (페이드 중 포함)</summary>
+    public bool IsShowing => currentText != null || (canvasGroup != null && canvasGroup.alpha > 0f);
+
+    /// <summary>씬의 어떤 슬롯이든 대사가 떠있으면 true. 이 동안 플레이어 입력(이동/점프)이 막힙니다.</summary>
+    public static bool AnyShowing
+    {
+        get
+        {
+            for (int i = 0; i < allSlots.Count; i++)
+            {
+                if (allSlots[i] != null && allSlots[i].IsShowing) return true;
+            }
+            return false;
+        }
+    }
+
+    void OnEnable()  { if (!allSlots.Contains(this)) allSlots.Add(this); }
+    void OnDisable() { allSlots.Remove(this); }
 
     void Awake()
     {
